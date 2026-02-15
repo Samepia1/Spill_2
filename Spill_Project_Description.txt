@@ -1,0 +1,1200 @@
+﻿Project name: Spill
+
+
+0) Build goal
+
+
+Build a university-only, email-verified, ephemeral “topic + thread” social app:
+
+
+Every user has a profile.
+
+
+Other users can create exactly one topic post about a given target user (author→target is unique).
+
+
+Each topic post has an open comment thread where any verified user in the same university can comment, including the post author and the target.
+
+
+Posts and their threads are time-limited (expire and disappear from the UI after a set TTL (default is 48 hours)).
+
+
+A feed surfaces the most active/liked topics across the university.
+
+
+This is a v0 test app: focus on core loop, speed, and correctness of constraints. Communities/frats/clubs are optional and should be left out unless explicitly asked.
+
+
+1) Product mental model
+
+
+A Post is not “a review.” A Post is a topic starter about a target person. Think: “Someone starts a discussion thread about you.”
+
+
+A Thread is where the drama/engagement happens. Replies can chain and get messy. People argue in comments.
+
+
+The key scarcity mechanic is author-target uniqueness: one author can open at most one topic  about one target once per 24 hours (in v0, forever).
+
+
+The key ephemerality mechanic is expiration: the entire topic + thread disappears after TTL (e.g., 48 hours).
+
+
+2) Core rules (hard constraints)
+2.1 University gating
+
+
+Only users with verified .edu email can use the app (with SUbabase verification code).
+
+
+Users are assigned to exactly one university based on email domain (e.g., umn.edu).
+
+
+Users can only see and interact with content for their university.
+
+
+2.2 Posting rule (the main one)
+
+
+For any (author_user_id, target_user_id) pair:
+
+
+Exactly one Post once every 24 hours is allowed in v0.
+
+
+Many different authors can post about the same target; therefore a profile can have many posts.
+
+
+2.3 Thread rule
+
+
+Each Post has an open thread.
+
+
+Any user in the same university can comment on the thread anonymously (including the post author and the target).
+
+
+Thread comments can be unlimited but must have rate limits to prevent spam.
+
+
+2.4 Expiration
+
+
+Each Post has an expires_at timestamp set at creation: created_at + TTL.
+
+
+After expiration:
+
+
+The Post is not visible in feed, search, or profiles.
+
+
+The thread comments under it are also not visible.
+
+
+Internally, you may keep expired records for analytics, but UI must treat them as gone.
+
+
+2.5 Immutability
+
+
+Post body is immutable: no edits (v0).
+
+
+Comments are immutable: no edits (v0).
+
+
+
+
+3) Roles & permissions
+Roles
+
+
+user: normal user
+
+
+moderator: can review reports, remove content, suspend users
+
+
+admin: can manage universities, moderators, global settings
+
+
+Permissions (summary)
+
+
+Users can read:
+
+
+Public user profiles within their university
+
+
+Active posts and threads within their university
+
+
+Users can create:
+
+
+One post per target (author-target unique)
+
+
+Comments on any active thread in their university
+
+
+Likes on posts (optional: likes on comments is out-of-scope in v0)
+
+
+Reports on posts/comments/users
+
+
+Moderators can:
+
+
+Remove posts (which hides the whole thread)
+
+
+Remove comments
+
+
+Suspend users temporarily or permanently
+
+
+4) UX screens and exact behaviors
+4.1 Onboarding / Auth
+
+
+Flow:
+
+
+Enter .edu email.
+
+
+Receive OTP code (or magic link).
+
+
+Verify.
+
+
+Create username/handle (unique) + optional display name.
+
+
+Land on Feed.
+
+
+Requirements:
+
+
+Must prevent non-.edu emails.
+
+
+Must map email domain → university_id. If unknown, block signup or put in “pending university” state (v0: block unknown domains).
+
+
+User profile is created immediately upon verification.
+
+
+4.2 Feed (main screen)
+
+
+Feed shows Post cards (topic starters), not comments.
+
+
+Each Post card displays:
+
+
+Target user handle (clickable)
+
+
+Post body (topic text)
+
+
+“Time left” until expiration
+
+
+Reply count (number of comments)
+
+
+Like count (likes on the post)
+
+
+Buttons: Like, Comment (opens thread)
+
+
+Tabs:
+
+
+Trending (default)
+
+
+New
+
+
+Ending soon
+
+
+Ranking (v0):
+
+
+Trending score should combine likes + comment activity with time decay.
+
+
+New = created_at desc
+
+
+Ending soon = expires_at asc
+
+
+Important: feed must exclude expired/removed posts.
+
+
+4.3 Search / Discover
+
+
+Basic search bar to find a target profile by handle or name.
+
+
+Results only within the same university.
+
+
+4.4 Profile page (target view)
+
+
+Profile shows:
+
+
+User header: handle + display name
+
+
+List of active Posts about this user (not created by this user unless they also have posts about themselves via other authors).
+
+
+Sorting controls:
+
+
+Top (likes)
+
+
+Newest
+
+
+Most commented
+
+
+Ending soon
+
+
+Each Post in profile list shows same card summary and opens thread.
+
+
+4.5 Post creation flow
+
+
+User chooses a target and writes the topic text.
+
+
+UI:
+
+
+Target picker: search handle, tap target.
+
+
+Text input (max 500 chars).
+
+
+Optional tags (v0: skip tags).
+
+
+Submit button.
+
+
+Server-side validation:
+
+
+Author and target must be different users (decide policy):
+
+
+v0: disallow self-targeting (no posting about yourself) to keep the mechanic clean.
+
+
+Must be same university.
+
+
+Must not already have a post for (author, target) pair.
+
+
+Must pass content filters.
+
+
+Rate limit: e.g., max 3 posts created per day per user.
+
+
+On success:
+
+
+Post created with expires_at = now + TTL.
+
+
+Redirect to the new thread.
+
+
+Failure states:
+
+
+If pair already exists: show “You already opened a topic about this person.”
+
+
+If target has no profile: cannot post (target must be a registered user).
+
+
+4.6 Thread view (Post detail)
+
+
+Thread view is the engagement core.
+
+
+Layout:
+
+
+Fixed Post “topic” card at top (target handle, author handle, body, time left, likes, report).
+
+
+Comments list below.
+
+
+Comment composer pinned at bottom.
+
+
+Comment sorting:
+
+
+Default: chronological (oldest→newest or newest→oldest; pick one and be consistent).
+
+
+Optional secondary: “Top” by simple score; v0 can skip.
+
+
+Comment composer:
+
+
+Text max 300 chars.
+
+
+Send button.
+
+
+Shows cooldown timer if rate-limited.
+
+
+Thread behaviors:
+
+
+Any user in university can comment while post is active.
+
+
+On expiration: thread becomes inaccessible (show “This topic has expired”).
+
+
+Include “Report” per comment.
+
+
+
+
+4.7 Moderator console (simple internal UI)
+
+
+Pages:
+
+
+Reports queue (filter by status)
+
+
+Report detail with context:
+
+
+show post/comment text
+
+
+show target and author
+
+
+show reporter reason/details
+Actions:
+
+
+Remove post (nukes thread)
+
+
+Remove comment
+
+
+Suspend user (24h, 7d, perm)
+
+
+Dismiss report
+
+
+Log all actions with timestamps and moderator id.
+
+
+5) Data model (entities + fields)
+
+
+Use a relational DB (Postgres recommended). Enforce constraints with indexes.
+
+
+5.1 User
+
+
+Fields:
+
+
+id (UUID)
+
+
+university_id (FK)
+
+
+email (unique)
+
+
+email_verified (bool)
+
+
+handle (unique, indexed)
+
+
+display_name (optional)
+
+
+role (user/mod/admin)
+
+
+status (active/suspended/deleted)
+
+
+created_at, last_active_at
+
+
+5.2 University
+
+
+id
+
+
+name
+
+
+email_domain (unique) or allow multiple domains
+
+
+created_at
+
+
+5.3 Post (topic starter)
+
+
+Fields:
+
+
+id
+
+
+university_id (FK)
+
+
+author_user_id (FK)
+
+
+target_user_id (FK)
+
+
+body (text 1–500)
+
+
+created_at
+
+
+expires_at
+
+
+status (active/expired/removed)
+
+
+removed_at, removed_by, removal_reason (nullable)
+
+
+like_count (denormalized int)
+
+
+comment_count (denormalized int)
+
+
+Hard constraint:
+
+
+Unique index: (author_user_id, target_user_id)
+This enforces your “one post per author-target” rule.
+
+
+Indexes:
+
+
+(university_id, status, expires_at)
+
+
+(target_user_id, status, created_at desc)
+
+
+(university_id, status, created_at desc)
+
+
+5.4 Comment (thread reply)
+
+
+Fields:
+
+
+id
+
+
+post_id (FK)
+
+
+university_id (FK) (denormalize for faster RLS)
+
+
+author_user_id (FK)
+
+
+body (1–300)
+
+
+created_at
+
+
+status (active/removed)
+
+
+removed_at, removed_by, removal_reason (nullable)
+
+
+Optional: parent_comment_id (nullable) for threading (v0 can be null always)
+
+
+Indexes:
+
+
+(post_id, status, created_at asc/desc)
+
+
+(university_id, status, created_at desc)
+
+
+5.5 Like (post likes)
+
+
+Fields:
+
+
+id
+
+
+post_id (FK)
+
+
+user_id (FK)
+
+
+created_at
+
+
+Constraint:
+
+
+Unique (post_id, user_id).
+
+
+
+
+5.7 ModerationAction (audit log)
+
+
+id
+
+
+moderator_user_id
+
+
+action_type (remove_post/remove_comment/suspend_user/unsuspend/etc.)
+
+
+entity_type, entity_id
+
+
+reason
+
+
+created_at
+
+
+5.8 RateLimit / Abuse (implementation choice)
+
+
+Either:
+
+
+store in Redis (preferred) using keys like comment:{user_id}:{post_id} counters
+or
+
+
+store a table user_action_counters (slower)
+
+
+6) Ranking & scoring details (feed)
+
+
+Compute a trending_score for active posts.
+
+
+Inputs:
+
+
+likes (like_count)
+
+
+comment activity (comment_count)
+
+
+age decay (based on hours since creation)
+
+
+time left optional boost (ending soon makes it spicy)
+
+
+Example v0 scoring (simple, implementable):
+
+
+age_hours = (now - created_at) in hours
+
+
+decay = exp(-age_hours / 24)
+
+
+score = (like_count * 1.0 + comment_count * 0.3) * decay
+
+
+Optionally boost if comment_count increasing fast (v0 skip velocity; keep simple).
+
+
+Implementation:
+
+
+Recompute on read (OK for v0 small scale) OR
+
+
+Store trending_score on Post and update via cron every few minutes.
+
+
+Feed queries must filter:
+
+
+status = active
+
+
+expires_at > now
+
+
+7) Rate limits (must specify exact numbers)
+Post creation
+
+
+Max 3 posts/day/user.
+
+
+Also enforce author-target uniqueness.
+
+
+Commenting
+
+
+Per user per post: max 20 comments (v0)
+
+
+Cooldown: 1 comment per 30 seconds (v0)
+
+
+Per user global: max 60 comments/hour (v0)
+
+
+Reporting
+
+
+Max 10 reports/day/user (to prevent report spam)
+
+
+Use Redis counters with TTL windows.
+
+
+8) Content filtering (minimum)
+
+
+Before storing any post/comment:
+
+
+Reject content containing:
+
+
+phone numbers (regex)
+
+
+emails (regex)
+
+
+common address patterns (regex)
+
+
+obvious slurs list
+
+
+obvious threat phrases list
+
+
+Also block URLs in v0 (or strip them).
+
+
+If blocked:
+
+
+return validation error: “This content violates rules.”
+
+
+This is not about being nice; it’s about keeping the prototype functioning.
+
+
+9) Expiration job
+
+
+Implement expiration as:
+
+
+expires_at + status field
+
+
+A scheduled job runs every minute (or every 5 minutes) and sets:
+
+
+status = expired for posts where expires_at <= now and status=active
+
+
+UI always filters active posts anyway (so even if job lags, filtering handles it).
+
+
+When a post expires:
+
+
+No further comments allowed (server must reject new comments if post inactive/expired).
+
+
+10) API contract (what endpoints must exist)
+
+
+Assume JSON REST.
+
+
+Auth
+
+
+POST /auth/request-otp { email }
+
+
+POST /auth/verify-otp { email, code } -> session
+
+
+POST /auth/logout
+
+
+Users
+
+
+GET /me
+
+
+PATCH /me { handle, display_name }
+
+
+GET /users/search?q=
+
+
+GET /users/:id (profile header)
+
+
+GET /users/:id/posts?sort=top|new|comments|ending
+
+
+Posts
+
+
+POST /posts { target_user_id, body } -> post
+
+
+GET /posts/:id -> post + counts
+
+
+GET /feed?tab=trending|new|ending&cursor=...
+
+
+POST /posts/:id/like / DELETE /posts/:id/like
+
+
+Comments
+
+
+GET /posts/:id/comments?cursor=...
+
+
+POST /posts/:id/comments { body } -> comment
+
+
+Optional delete: DELETE /comments/:id (only within 2 minutes)
+
+
+Reports
+
+
+POST /reports { entity_type, entity_id, reason, details }
+
+
+Moderation (protected)
+
+
+GET /mod/reports?status=open
+
+
+POST /mod/remove-post { post_id, reason }
+
+
+POST /mod/remove-comment { comment_id, reason }
+
+
+POST /mod/suspend-user { user_id, duration, reason }
+
+
+All endpoints must enforce:
+
+
+user authenticated
+
+
+same university access controls
+
+
+post active for commenting
+
+
+11) Access control (very explicit)
+
+
+At the database or API layer, enforce:
+
+
+A user can read a post/comment only if post.university_id == user.university_id.
+
+
+A user can create a post only if:
+
+
+target exists
+
+
+target in same university
+
+
+author-target unique constraint passes
+
+
+author not suspended
+
+
+A user can comment only if:
+
+
+post exists
+
+
+post is active and not expired
+
+
+commenter in same university
+
+
+commenter not suspended
+
+
+rate limits pass
+
+
+Moderators bypass normal removal restrictions but are still limited to their university (v0: mod per uni).
+
+
+12) Non-functional requirements (v0)
+
+
+Must handle at least a few thousand users without collapsing.
+
+
+Pagination for feed and comments (cursor-based).
+
+
+Denormalized counters (like_count, comment_count) updated transactionally:
+
+
+on like create/delete
+
+
+on comment create
+
+
+All timestamps stored in UTC.
+
+
+13) v0 scope boundaries
+
+
+Include:
+
+
+Auth + .edu verification
+
+
+Profiles
+
+
+Post creation with unique author-target constraint
+
+
+Thread comments (flat list)
+
+
+Likes on posts
+
+
+Feed tabs
+
+
+Expiration
+
+
+Reports + mod removal/suspension
+
+
+Rate limiting
+
+
+Exclude:
+
+
+Communities/frats/clubs
+
+
+DMs
+
+
+Follow/friends
+
+
+Comment likes
+
+
+Nested/threaded comments (optional later)
+
+
+Push notifications
+
+
+Public web access without login
+
+
+14) Implementation preferences (to reduce ambiguity for the coder)
+
+
+Choose one stack and stick to it:
+
+
+Frontend: Next.js (App Router), Tailwind, simple components
+
+
+Backend/DB/Auth: Supabase (Postgres + Auth + RLS) OR a Node API with Postgres + Redis
+
+
+Rate limiting: Redis
+
+
+Deployment: Vercel + Supabase
+
+
+If using Supabase:
+
+
+Use RLS policies to enforce university separation.
+
+
+Use database constraints for uniqueness.
+
+
+Use Edge Functions / server routes for endpoints that need privileged logic (e.g., denormalized counters, moderation).
+
+
+The UI should look similar to Instagram UI or Yik Yak’s UI. Minimalistic, but stylish (not mandatory for v0, but preferred)
+
+
+15) Acceptance tests (what “done” means)
+
+
+A tester must be able to:
+
+
+Sign up with a valid .edu email and verify.
+
+
+Search for another user and view their profile.
+
+
+Create a topic post about them.
+
+
+Attempt to create a second post about the same target and get blocked (unique constraint works).
+
+
+Open the thread and post multiple comments from multiple accounts.
+
+
+See the post appear in feed, sorted reasonably in Trending/New.
+
+
+Like the post and see like count update.
+
+
+Report a comment; see it appear in mod console; mod removes it.
+
+
+After TTL passes (or TTL set short in test), the post and thread disappear and new comments are rejected.
+
+
+16) Additional notes (important) — rewritten precisely
+16.1 Anonymity rules (core)
+Posts and thread replies/comments are anonymous to all regular users.
+
+The target user (User B) is publicly visible on their profile and in the feed (handle + name).
+
+The post author (User A) and all commenters must appear as anonymous identities (e.g., “Anon”, “Anon 12”, etc.).
+
+Moderators/admins can see true author identities in the moderation console for enforcement and abuse handling (required).
+
+16.2 Scope of anonymity (what is hidden vs shown)
+Shown publicly:
+Target user (User B): handle + display name.
+
+Post content, comment content.
+
+Time remaining, counts, etc.
+
+Hidden publicly:
+Post author’s handle/name/user id
+
+Commenter handles/names/user ids
+
+Any direct identifiers (emails, phones, links, addresses—filter these)
+
+16.3 Stable anonymous identities (you need to choose one)
+Each user gets a consistent pseudonym within a single post thread, e.g.:
+
+“Anon 3” in that thread only
+
+same user appears as “Anon 3” on all their comments in that thread
+
+In another thread, the same user might be “Anon 11”.
+
+This preserves readability and argument continuity without making a global identity.
+16.4 UI requirement
+UI must not look like a generic CRUD app.
+
+Visual style should resemble Instagram Threads / Yik Yak:
+
+clean, mobile-first
+
+rounded cards
+
+strong typography
+
+minimal borders
+
+subtle animations
+
+feed-centric experience
+
+16.5 Code quality requirement
+Add a short docstring to every function (1–3 lines: purpose + key inputs/outputs).
+
+In each folder, include a README.md describing:
+
+what the folder contains
+
+key files and their responsibility
+
+how components/modules interact
+
+________________
+
+
+17) General flow for User A and User B
+17.1 Onboarding/auth
+Both users sign in using university email.
+
+Verification is done via OTP code sent to the email.
+
+After verification, user completes profile:
+
+handle (unique)
+
+display name (optional)
+
+17.2 User A creates a post about User B
+User A searches for User B by:
+
+handle (exact/partial)
+
+display name (partial)
+
+User A opens User B’s profile.
+
+Profile shows:
+
+User B’s public identity (handle + name)
+
+list of active posts about User B (created by other users), or empty state.
+
+If User A has not already created a post about User B (in the last 24 hours):
+
+User A creates a new anonymous post (topic starter) about User B.
+
+System enforces uniqueness: (author, target) can only happen once (ever, in v0).
+
+That post becomes visible:
+
+in the main university feed
+
+on User B’s profile page
+
+The post has a thread.
+
+Anyone at the same university can comment.
+
+Comments are anonymous.
+
+17.3 User B’s experience
+User B can browse their profile and see posts about them.
+
+User B can open any post thread and comment.
+
+User B’s comments are also anonymous (User B is not “verified” in thread unless you add special labeling; v0: keep them anonymous too).
+
+
