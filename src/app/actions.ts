@@ -7,10 +7,8 @@ import { revalidatePath } from "next/cache";
  * Toggles a like on a post for the current user.
  * Inserts a like if one doesn't exist, deletes it if it does.
  *
- * Note: This does NOT update the denormalized `like_count` on the posts table
- * because regular users lack an UPDATE RLS policy on posts. The feed should
- * count likes from the `likes` table directly, or a database trigger should
- * be added to keep `like_count` in sync.
+ * The denormalized `like_count` on the posts table is kept in sync by a
+ * Postgres trigger (see migration 005_counter_triggers.sql).
  */
 export async function toggleLike(postId: string) {
   const supabase = await createClient();
@@ -48,6 +46,7 @@ export async function toggleLike(postId: string) {
     }
 
     revalidatePath("/");
+    revalidatePath(`/post/${postId}`);
     return { liked: false };
   }
 
@@ -61,5 +60,6 @@ export async function toggleLike(postId: string) {
   }
 
   revalidatePath("/");
+  revalidatePath(`/post/${postId}`);
   return { liked: true };
 }

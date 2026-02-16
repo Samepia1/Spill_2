@@ -72,16 +72,22 @@ export async function createPost(formData: FormData) {
     return { error: "You can't create a post about yourself" };
   }
 
-  // 9. Check for existing post about this target
-  const { data: existingPost } = await supabase
+  // 9. Check for recent post about this target (30-minute cooldown per author-target pair)
+  const thirtyMinutesAgo = new Date(
+    Date.now() - 30 * 60 * 1000
+  ).toISOString();
+
+  const { data: recentPost } = await supabase
     .from("posts")
     .select("id")
     .eq("author_user_id", user.id)
     .eq("target_user_id", target.id)
-    .single();
+    .gte("created_at", thirtyMinutesAgo)
+    .limit(1)
+    .maybeSingle();
 
-  if (existingPost) {
-    return { error: "You already have a post about this person" };
+  if (recentPost) {
+    return { error: "You can only post about this person once every 30 minutes" };
   }
 
   // 10. Check daily rate limit (3 posts per 24 hours)
@@ -115,9 +121,6 @@ export async function createPost(formData: FormData) {
   });
 
   if (insertError) {
-    if (insertError.code === "23505") {
-      return { error: "You already have a post about this person" };
-    }
     return { error: insertError.message };
   }
 
