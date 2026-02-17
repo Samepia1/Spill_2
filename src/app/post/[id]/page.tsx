@@ -52,9 +52,8 @@ export default async function ThreadPage({
   // Fetch all comments for this post, chronological order
   const { data: comments } = await supabase
     .from("comments")
-    .select("id, body, author_user_id, created_at")
+    .select("id, body, author_user_id, created_at, status")
     .eq("post_id", post.id)
-    .eq("status", "active")
     .order("created_at", { ascending: true });
 
   // Build anonymous identity map
@@ -75,6 +74,7 @@ export default async function ThreadPage({
     createdAt: c.created_at,
     anonNumber: anonMap.get(c.author_user_id) ?? 0,
     isCurrentUser: c.author_user_id === user.id,
+    status: c.status,
   }));
 
   const currentUserAnonNumber = anonMap.get(user.id) ?? null;

@@ -3,21 +3,29 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-const tabs = [
+const baseTabs = [
   { href: "/", label: "Feed", icon: HomeIcon },
   { href: "/search", label: "Search", icon: SearchIcon },
   { href: "/create", label: "Post", icon: PlusIcon },
   { href: "/profile", label: "Profile", icon: UserIcon },
 ];
 
+const modTab = { href: "/mod", label: "Mod", icon: ShieldIcon };
+
 const hideOnRoutes = ["/login", "/verify", "/onboarding"];
 
-export default function BottomNav() {
+export default function BottomNav({
+  isModerator = false,
+}: {
+  isModerator?: boolean;
+}) {
   const pathname = usePathname();
 
   if (hideOnRoutes.some((route) => pathname.startsWith(route))) {
     return null;
   }
+
+  const tabs = isModerator ? [...baseTabs, modTab] : baseTabs;
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-50 border-t border-zinc-200 bg-white/80 backdrop-blur-lg dark:border-zinc-800 dark:bg-zinc-950/80">
@@ -116,6 +124,23 @@ function UserIcon({ active }: { active: boolean }) {
     >
       <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
       <circle cx="12" cy="7" r="4" />
+    </svg>
+  );
+}
+
+function ShieldIcon({ active }: { active: boolean }) {
+  return (
+    <svg
+      width="24"
+      height="24"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={active ? 2.5 : 1.5}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
     </svg>
   );
 }

@@ -26,7 +26,7 @@ export async function proxy(request: NextRequest) {
   // Has session — check for profile
   const { data: profile } = await supabase
     .from("users")
-    .select("id")
+    .select("id, role")
     .eq("id", user.id)
     .single();
 
@@ -42,6 +42,17 @@ export async function proxy(request: NextRequest) {
 
   // Has session + profile, on auth page or onboarding → redirect to /
   if (isPublicRoute || isOnboardingRoute) {
+    const url = request.nextUrl.clone();
+    url.pathname = "/";
+    return NextResponse.redirect(url);
+  }
+
+  // /mod routes require moderator or admin role
+  if (
+    pathname.startsWith("/mod") &&
+    profile.role !== "moderator" &&
+    profile.role !== "admin"
+  ) {
     const url = request.nextUrl.clone();
     url.pathname = "/";
     return NextResponse.redirect(url);

@@ -4,6 +4,7 @@ import { useTransition, useState } from "react";
 import Link from "next/link";
 import { timeRemaining } from "@/lib/time";
 import { toggleLike } from "@/app/actions";
+import ReportModal from "@/components/report-modal";
 
 export type PostCardProps = {
   id: string;
@@ -32,6 +33,7 @@ export default function PostCard({
   const [isPending, startTransition] = useTransition();
   const [optimisticLiked, setOptimisticLiked] = useState(userHasLiked);
   const [optimisticCount, setOptimisticCount] = useState(likeCount);
+  const [showReport, setShowReport] = useState(false);
 
   function handleLike() {
     const wasLiked = optimisticLiked;
@@ -111,7 +113,22 @@ export default function PostCard({
           <ChatIcon />
           <span>{commentCount}</span>
         </Link>
+
+        <button
+          onClick={() => setShowReport(true)}
+          className="ml-auto flex items-center gap-1 text-sm text-zinc-400 transition-colors hover:text-orange-500 dark:text-zinc-500 dark:hover:text-orange-400"
+        >
+          <FlagIcon />
+        </button>
       </div>
+
+      {showReport && (
+        <ReportModal
+          entityType="post"
+          entityId={id}
+          onClose={() => setShowReport(false)}
+        />
+      )}
     </article>
   );
 }
@@ -129,6 +146,24 @@ function HeartIcon({ filled }: { filled: boolean }) {
       strokeLinejoin="round"
     >
       <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
+    </svg>
+  );
+}
+
+function FlagIcon() {
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.5}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z" />
+      <line x1="4" y1="22" x2="4" y2="15" />
     </svg>
   );
 }
