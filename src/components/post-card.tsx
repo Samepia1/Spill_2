@@ -73,11 +73,6 @@ export default function PostCard({
               className="font-medium text-zinc-600 transition-colors hover:text-zinc-800 dark:text-zinc-300 dark:hover:text-zinc-100"
             >
               @{authorHandle}
-              {authorDisplayName && (
-                <span className="ml-1 font-normal text-zinc-400 dark:text-zinc-500">
-                  ({authorDisplayName})
-                </span>
-              )}
             </Link>
           )}
           <span className="text-zinc-300 dark:text-zinc-600">→</span>
