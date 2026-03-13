@@ -1,7 +1,7 @@
 # Spill — Project Context
 
 ## What is Spill?
-Anonymous college confessions platform. Students sign in with their .edu email, pick a handle, and post anonymous confessions about other students at their university. Posts are scoped to the user's university.
+Anonymous college confessions platform. Students sign in with their .edu email, pick a handle, and post confessions about other students at their university. Posts are scoped to the user's university. Authors can choose to post anonymously (default) or reveal their identity.
 
 ## Tech Stack
 - **Framework**: Next.js 16.1.6 (App Router, Turbopack)
@@ -9,6 +9,7 @@ Anonymous college confessions platform. Students sign in with their .edu email, 
 - **Styling**: Tailwind CSS v4
 - **Language**: TypeScript (strict)
 - **Fonts**: Geist Sans + Geist Mono
+- **Deployment**: Vercel (auto-deploys from `main` branch on GitHub)
 
 ## Project Structure
 ```
@@ -25,14 +26,16 @@ src/
 │   │   ├── login/page.tsx      # Email input → .edu validation → university check → OTP send
 │   │   ├── verify/page.tsx     # 6-digit OTP input → verify → redirect to /onboarding or /
 │   │   └── onboarding/page.tsx # Handle + display name → create public.users row
-│   ├── create/page.tsx         # Post creation form
+│   ├── create/
+│   │   ├── page.tsx            # Post creation form (target picker, subject, body, anonymous toggle, expiration toggle)
+│   │   └── actions.ts          # Server actions: createPost, getCurrentUserHandle, searchTargetUsers
 │   ├── search/page.tsx         # Search users page
 │   ├── profile/
-│   │   ├── page.tsx            # Current user's profile
-│   │   └── [handle]/page.tsx   # Public profile view
+│   │   ├── page.tsx            # Current user's profile (redirects to /profile/[handle])
+│   │   └── [handle]/page.tsx   # Public profile view (posts about this user, sort tabs)
 │   ├── post/[id]/
-│   │   ├── page.tsx            # Thread view (post + comments, shows removed comment placeholders)
-│   │   └── actions.ts          # Server action: createComment
+│   │   ├── page.tsx            # Thread view (post + comments, identity choice, anon numbering)
+│   │   └── actions.ts          # Server action: createComment (with isAnonymous + identity lock)
 │   └── mod/
 │       ├── page.tsx            # Moderation queue (Open/Reviewed/Dismissed tabs)
 │       ├── actions.ts          # Server actions: removePost, removeComment, suspendUser, dismissReport
@@ -40,13 +43,14 @@ src/
 ├── components/
 │   ├── bottom-nav.tsx          # Bottom tab bar (Feed, Search, Post, Profile + conditional Mod tab)
 │   ├── bottom-nav-wrapper.tsx  # Server component — fetches user role, passes isModerator to BottomNav
-│   ├── comment-composer.tsx    # Comment input form
-│   ├── comment-list.tsx        # Comment list with report flag icons + removed comment placeholders
+│   ├── comment-composer.tsx    # Comment input with identity choice (anonymous/revealed, locked per thread)
+│   ├── comment-list.tsx        # Comment list (Anon N or @handle, OP badge, report flags)
 │   ├── feed-tabs.tsx           # Trending/New/Ending tab selector
-│   ├── post-card.tsx           # Post card with like, comment, and report flag buttons
+│   ├── post-card.tsx           # Post card: "Anonymous → @target" or "@author → @target" + like/comment/report
 │   └── report-modal.tsx        # Reusable report modal (reason dropdown, details textarea)
 ├── lib/
-│   ├── time.ts                 # formatRelativeTime, timeRemaining helpers
+│   ├── time.ts                 # formatRelativeTime, timeRemaining (nullable) helpers
+│   ├── current-user.ts         # getCurrentUser() — fetches auth user + public profile
 │   └── supabase/
 │       ├── client.ts           # Browser Supabase client (createBrowserClient)
 │       ├── server.ts           # Server Supabase client (createServerClient with cookies)
@@ -60,7 +64,9 @@ supabase/
     ├── 003_posts_subject_and_body_limit.sql  # Added subject column, increased body limit to 1000
     ├── 004_drop_author_target_unique.sql     # Removed unique constraint on author+target
     ├── 005_counter_triggers.sql              # Triggers for like_count and comment_count
-    └── 006_moderation_rls_policies.sql       # UPDATE policies for moderators on reports, posts, comments, users
+    ├── 006_moderation_rls_policies.sql       # UPDATE policies for moderators on reports, posts, comments, users
+    ├── 007_optional_expiration.sql           # expires_at nullable + clear existing expirations
+    └── 008_identity_reveal.sql              # is_anonymous on posts and comments
 ```
 
 ## Auth Flow (fully working)
@@ -82,35 +88,51 @@ supabase/
 ## Database Schema (key tables)
 - **universities**: id, name, email_domain (seeded with umn.edu, test.edu)
 - **users**: id (refs auth.users), university_id, email, handle, display_name, role (`user`/`moderator`/`admin`), status (`active`/`suspended`/`deleted`)
-- **posts**: id, university_id, author_user_id, target_user_id, subject (1-200 chars), body (1-1000 chars), expires_at, like_count, comment_count, status (`active`/`expired`/`removed`), removed_at, removed_by, removal_reason
-- **comments**: id, post_id, university_id, author_user_id, body (1-300 chars), parent_comment_id, status (`active`/`removed`), removed_at, removed_by, removal_reason
+- **posts**: id, university_id, author_user_id, target_user_id, subject (1-200 chars), body (1-1000 chars), is_anonymous (bool, default true), expires_at (nullable timestamptz), like_count, comment_count, status (`active`/`expired`/`removed`), removed_at, removed_by, removal_reason
+- **comments**: id, post_id, university_id, author_user_id, body (1-300 chars), is_anonymous (bool, default true), parent_comment_id, status (`active`/`removed`), removed_at, removed_by, removal_reason
 - **likes**: post_id + user_id (unique)
 - **reports**: reporter_user_id, entity_type (`post`/`comment`/`user`), entity_id, reason, details, status (`open`/`reviewed`/`dismissed`)
 - **moderation_actions**: moderator_user_id, action_type, entity_type, entity_id, reason
 - All tables have RLS enabled. Users can only see data within their own university (via `current_user_university_id()` helper function).
 - Moderators/admins have UPDATE policies on reports, posts, comments, and users within their university.
 
-## Completed Steps
-- **Step 1**: Project scaffolding + Supabase setup + full DB schema deployed
-- **Step 2**: Authentication & onboarding (OTP flow, route protection, profile creation)
-- **Step 3**: Feed page (trending/new/ending tabs, PostCard with like counts)
-- **Step 4**: Search users, public profiles, post creation form
-- **Step 5**: Like/unlike with optimistic UI, counter triggers
-- **Step 6**: Thread view, comments with anonymous identity (Anon 1 = OP), comment composer
-- **Step 7**: Reports & moderation console
-  - Report modal (reason dropdown: harassment, hate speech, false info, spam, privacy violation, other + optional details)
-  - Flag icon on posts and comments to trigger report modal
-  - `createReport` server action with auth/suspended/rate-limit (10/day)/ownership checks
-  - Removed comment placeholders ("[This comment has been removed]") in thread view
-  - Conditional "Mod" tab in bottom nav (shield icon, only for moderators/admins)
-  - `/mod` route protection (redirects non-moderators to `/`)
-  - Moderation queue page with Open/Reviewed/Dismissed tabs
-  - Report cards with expandable content (fetches entity on-demand), two-step action buttons (reason input → confirm)
-  - Mod actions: removePost, removeComment, suspendUser (cannot suspend other mods/admins), dismissReport
-  - All mod actions log to `moderation_actions` table and update report status
+## Post Identity System
+- **Anonymous posts** (default): header shows `Anonymous → @targetHandle`
+- **Revealed posts**: header shows `@authorHandle → @targetHandle` (author handle links to their profile)
+- Create form has a "Post anonymously" toggle (default: on). Turning it off shows the user's handle.
+- `is_anonymous` boolean stored on each post. Feed, profile, and thread queries join on both `author` and `target` foreign keys.
+
+## Comment Identity System
+- **Per-thread identity choice**: first time commenting in a thread, user chooses "Anonymously" or "As @handle"
+- **Locked per thread**: once chosen, the identity mode cannot be changed for that thread. Server action validates consistency.
+- **Anonymous commenters**: get thread-local "Anon N" numbers (only anonymous users are numbered)
+- **Revealed commenters**: show @handle
+- **OP numbering**: if post was anonymous, OP = Anon 1 (reserved). If post was revealed, Anon counter starts at 1 for commenters.
+- **Returning users**: composer auto-uses previous choice, shows identity label, no choice buttons
+- `is_anonymous` boolean stored on each comment row
+
+## Post Expiration System
+- **Optional**: posts live forever by default. Author can toggle "Auto-delete after N hours" (1-720) on the create form.
+- `expires_at` is nullable. NULL = no expiration.
+- Feed query: `.or("expires_at.is.null,expires_at.gt.${now}")` — shows non-expired + permanent posts
+- "Ending Soon" tab: filters to only posts with expiration set, ordered by soonest expiring
+- Thread view: `isActive` checks both status and expiration; comment composer hidden for expired posts
+- Comment action: null-guards `expires_at` before checking expiration (`new Date(null)` returns epoch — known gotcha)
+
+## Completed Features
+1. **Auth & onboarding**: OTP email flow, .edu validation, handle creation, route protection
+2. **Feed**: trending (decay formula), new, ending soon tabs; PostCard with like/comment/report
+3. **Search & profiles**: user search, public profile with posts-about-user, sort tabs (top/newest/comments/ending)
+4. **Post creation**: target picker (debounced search), subject/body, anonymous toggle, expiration toggle
+5. **Likes**: optimistic UI, counter triggers in DB
+6. **Thread view**: post + comments, anonymous identity system, comment composer with identity choice
+7. **Reports & moderation**: report modal, flag icons, mod console (Open/Reviewed/Dismissed), mod actions (remove post/comment, suspend user, dismiss report), moderation_actions audit log
+8. **Optional expiration**: author-chosen auto-delete timer, permanent posts by default
+9. **Identity reveal**: anonymous/revealed for both posts and comments, per-thread locked comment identity
+10. **Deployment**: Vercel (auto-deploy from GitHub), Supabase hosted DB
 
 ## What's Next
-The spec document is at `Spill_Project_Description.txt`. Remaining features may include: notifications, post expiration handling, user profile editing, admin panel, and deployment.
+The spec document is at `Spill_Project_Description.txt`. Remaining features may include: notifications, user profile editing, admin panel, and further polish.
 
 ## Commands
 ```bash
@@ -120,6 +142,15 @@ npm run lint   # ESLint
 ```
 
 ## Environment
-Supabase credentials are in `.env.local` (not committed). Required vars:
-- `NEXT_PUBLIC_SUPABASE_URL`
-- `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+- **Local**: Supabase credentials in `.env.local` (not committed)
+- **Vercel**: Same env vars set in Vercel dashboard
+- Required vars: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+- Optional (for future use): `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN`
+
+## Key Patterns & Gotchas
+- **Supabase joins**: use foreign key syntax like `author:users!posts_author_user_id_fkey(handle, display_name)` — cast result with `as unknown as { handle: string; ... } | null`
+- **Nullable expires_at**: always null-guard before `new Date(expires_at)` — `new Date(null)` returns epoch (1970), not an error
+- **Feed/profile expiration filter**: use `.or("expires_at.is.null,expires_at.gt.${now}")` — never `.gt("expires_at", now)` alone (hides permanent posts)
+- **Server actions in thread**: `boundCreateComment` wraps `createComment` with post ID closure via `"use server"` inline
+- **Anonymous numbering**: built server-side in thread page, only anonymous participants get numbers, stripped from client via SafeComment type
+- **Client components needing server data**: use server actions called in useEffect (e.g., `getCurrentUserHandle` in create form)
