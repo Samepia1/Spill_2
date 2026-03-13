@@ -18,6 +18,8 @@ function CreatePostForm() {
   const [showTargetPicker, setShowTargetPicker] = useState(false);
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
+  const [expires, setExpires] = useState(false);
+  const [expiresInHours, setExpiresInHours] = useState(24);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -85,6 +87,9 @@ function CreatePostForm() {
     formData.set("targetHandle", targetHandle);
     formData.set("subject", subject);
     formData.set("body", body);
+    if (expires) {
+      formData.set("expiresInHours", String(expiresInHours));
+    }
 
     const result = await createPost(formData);
     if (result?.error) {
@@ -238,6 +243,52 @@ function CreatePostForm() {
             rows={5}
             className="min-h-[120px] w-full resize-none rounded-lg border border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-900 placeholder-zinc-400 focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-500 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-50 dark:placeholder-zinc-500"
           />
+        </div>
+
+        {/* Expiration toggle */}
+        <div>
+          <label className="flex cursor-pointer items-center gap-3">
+            <button
+              type="button"
+              role="switch"
+              aria-checked={expires}
+              onClick={() => setExpires(!expires)}
+              className={`relative inline-flex h-6 w-11 shrink-0 rounded-full border-2 border-transparent transition-colors ${
+                expires
+                  ? "bg-zinc-900 dark:bg-zinc-100"
+                  : "bg-zinc-200 dark:bg-zinc-700"
+              }`}
+            >
+              <span
+                className={`pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow-sm transition-transform dark:bg-zinc-900 ${
+                  expires ? "translate-x-5" : "translate-x-0"
+                }`}
+              />
+            </button>
+            <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
+              Auto-delete after...
+            </span>
+          </label>
+
+          {expires && (
+            <div className="mt-2 flex items-center gap-2">
+              <input
+                type="number"
+                min={1}
+                max={720}
+                value={expiresInHours}
+                onChange={(e) =>
+                  setExpiresInHours(
+                    Math.max(1, Math.min(720, Number(e.target.value) || 1))
+                  )
+                }
+                className="w-20 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-500 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-50"
+              />
+              <span className="text-sm text-zinc-500 dark:text-zinc-400">
+                hours
+              </span>
+            </div>
+          )}
         </div>
 
         {/* Submit button */}

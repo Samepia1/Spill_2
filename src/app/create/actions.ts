@@ -105,10 +105,17 @@ export async function createPost(formData: FormData) {
     return { error: "You can only create 3 posts per day" };
   }
 
-  // 11. Calculate expiry (48 hours from now)
-  const expires_at = new Date(
-    Date.now() + 48 * 60 * 60 * 1000
-  ).toISOString();
+  // 11. Calculate optional expiry
+  const expiresInHours = formData.get("expiresInHours") as string | null;
+  let expires_at: string | null = null;
+
+  if (expiresInHours) {
+    const hours = Number(expiresInHours);
+    if (isNaN(hours) || hours < 1 || hours > 720) {
+      return { error: "Expiration must be between 1 and 720 hours" };
+    }
+    expires_at = new Date(Date.now() + hours * 60 * 60 * 1000).toISOString();
+  }
 
   // 12. Insert the post
   const { error: insertError } = await supabase.from("posts").insert({
@@ -117,7 +124,7 @@ export async function createPost(formData: FormData) {
     target_user_id: target.id,
     subject: trimmedSubject,
     body: trimmedBody,
-    expires_at,
+    ...(expires_at ? { expires_at } : {}),
   });
 
   if (insertError) {

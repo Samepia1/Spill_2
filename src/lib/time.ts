@@ -10,8 +10,10 @@ export function formatRelativeTime(createdAt: string): string {
   return `${days}d ago`;
 }
 
-/** Returns a human-readable "time remaining" string like "23h left" or "45m left". Returns "Expired" if the time has passed. */
-export function timeRemaining(expiresAt: string): string {
+/** Returns a human-readable "time remaining" string like "23h left" or "45m left". Returns "Expired" if the time has passed. Returns null if no expiration is set. */
+export function timeRemaining(expiresAt: string | null): string | null {
+  if (!expiresAt) return null;
+
   const now = Date.now();
   const expires = new Date(expiresAt).getTime();
   const diff = expires - now;

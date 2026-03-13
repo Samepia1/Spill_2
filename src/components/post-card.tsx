@@ -12,7 +12,7 @@ export type PostCardProps = {
   body: string;
   targetHandle: string;
   targetDisplayName: string | null;
-  expiresAt: string;
+  expiresAt: string | null;
   likeCount: number;
   commentCount: number;
   createdAt: string;
@@ -70,15 +70,17 @@ export default function PostCard({
           )}
         </Link>
 
-        <span
-          className={`text-xs ${
-            isExpired
-              ? "text-red-500 dark:text-red-400"
-              : "text-zinc-400 dark:text-zinc-500"
-          }`}
-        >
-          {remaining}
-        </span>
+        {remaining && (
+          <span
+            className={`text-xs ${
+              isExpired
+                ? "text-red-500 dark:text-red-400"
+                : "text-zinc-400 dark:text-zinc-500"
+            }`}
+          >
+            {remaining}
+          </span>
+        )}
       </div>
 
       {/* Subject */}

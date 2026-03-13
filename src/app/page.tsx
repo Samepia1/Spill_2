@@ -17,20 +17,22 @@ export default async function FeedPage({
     data: { user },
   } = await supabase.auth.getUser();
 
-  // Fetch active, non-expired posts with target user info
+  // Fetch active posts (non-expired or no expiration set)
+  const now = new Date().toISOString();
   let query = supabase
     .from("posts")
     .select(
       "id, subject, body, target_user_id, expires_at, like_count, comment_count, created_at, target:users!posts_target_user_id_fkey(handle, display_name)"
     )
     .eq("status", "active")
-    .gt("expires_at", new Date().toISOString());
+    .or(`expires_at.is.null,expires_at.gt.${now}`);
 
   // Apply sort based on tab
   if (activeTab === "new") {
     query = query.order("created_at", { ascending: false });
   } else if (activeTab === "ending") {
-    query = query.order("expires_at", { ascending: true });
+    // Only show posts that have an expiration set
+    query = query.not("expires_at", "is", null).order("expires_at", { ascending: true });
   } else {
     // Trending: fetch all and sort client-side with decay formula
     query = query.order("created_at", { ascending: false });
