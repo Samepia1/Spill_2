@@ -54,7 +54,7 @@ export async function createComment(postId: string, body: string) {
     return { error: "This post has been removed" };
   }
 
-  if (new Date(post.expires_at) <= new Date()) {
+  if (post.expires_at && new Date(post.expires_at) <= new Date()) {
     return { error: "This post has expired" };
   }
 
