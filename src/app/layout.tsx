@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import BottomNavWrapper from "@/components/bottom-nav-wrapper";
+import ThemeProvider from "@/components/theme-provider";
+import SettingsIcon from "@/components/settings-icon";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -24,12 +26,22 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
+      <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){var t=localStorage.getItem("theme")||"system";var d=t==="dark"||(t==="system"&&window.matchMedia("(prefers-color-scheme: dark)").matches);if(d)document.documentElement.classList.add("dark");})();`,
+          }}
+        />
+      </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        <main className="pb-16">{children}</main>
-        <BottomNavWrapper />
+        <ThemeProvider>
+          <SettingsIcon />
+          <main className="pb-16">{children}</main>
+          <BottomNavWrapper />
+        </ThemeProvider>
       </body>
     </html>
   );
