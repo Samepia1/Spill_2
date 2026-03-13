@@ -2,11 +2,12 @@
 
 import { useState, useEffect, useRef, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
-import { searchTargetUsers, createPost } from "./actions";
+import { searchTargetUsers, createPost, getCurrentUserHandle } from "./actions";
 
 function CreatePostForm() {
   const searchParams = useSearchParams();
 
+  const [currentUserHandle, setCurrentUserHandle] = useState<string | null>(null);
   const [targetHandle, setTargetHandle] = useState("");
   const [targetDisplayName, setTargetDisplayName] = useState<string | null>(
     null
@@ -18,12 +19,18 @@ function CreatePostForm() {
   const [showTargetPicker, setShowTargetPicker] = useState(false);
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
+  const [isAnonymous, setIsAnonymous] = useState(true);
   const [expires, setExpires] = useState(false);
   const [expiresInHours, setExpiresInHours] = useState(24);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Fetch current user's handle for identity toggle
+  useEffect(() => {
+    getCurrentUserHandle().then(setCurrentUserHandle);
+  }, []);
 
   // Pre-fill target from URL param
   useEffect(() => {
@@ -87,6 +94,7 @@ function CreatePostForm() {
     formData.set("targetHandle", targetHandle);
     formData.set("subject", subject);
     formData.set("body", body);
+    formData.set("isAnonymous", String(isAnonymous));
     if (expires) {
       formData.set("expiresInHours", String(expiresInHours));
     }
@@ -243,6 +251,37 @@ function CreatePostForm() {
             rows={5}
             className="min-h-[120px] w-full resize-none rounded-lg border border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-900 placeholder-zinc-400 focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-500 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-50 dark:placeholder-zinc-500"
           />
+        </div>
+
+        {/* Anonymous toggle */}
+        <div>
+          <label className="flex cursor-pointer items-center gap-3">
+            <button
+              type="button"
+              role="switch"
+              aria-checked={isAnonymous}
+              onClick={() => setIsAnonymous(!isAnonymous)}
+              className={`relative inline-flex h-6 w-11 shrink-0 rounded-full border-2 border-transparent transition-colors ${
+                isAnonymous
+                  ? "bg-zinc-900 dark:bg-zinc-100"
+                  : "bg-zinc-200 dark:bg-zinc-700"
+              }`}
+            >
+              <span
+                className={`pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow-sm transition-transform dark:bg-zinc-900 ${
+                  isAnonymous ? "translate-x-5" : "translate-x-0"
+                }`}
+              />
+            </button>
+            <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
+              Post anonymously
+            </span>
+          </label>
+          {!isAnonymous && currentUserHandle && (
+            <p className="mt-1.5 ml-14 text-xs text-zinc-500 dark:text-zinc-400">
+              Your handle <span className="font-medium">@{currentUserHandle}</span> will be visible
+            </p>
+          )}
         </div>
 
         {/* Expiration toggle */}

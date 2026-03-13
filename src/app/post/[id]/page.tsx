@@ -21,11 +21,11 @@ export default async function ThreadPage({
 
   if (!user) notFound();
 
-  // Fetch the post with target user info
+  // Fetch the post with target and author user info
   const { data: post } = await supabase
     .from("posts")
     .select(
-      "id, subject, body, author_user_id, target_user_id, university_id, expires_at, like_count, comment_count, created_at, status, target:users!posts_target_user_id_fkey(handle, display_name)"
+      "id, subject, body, author_user_id, target_user_id, university_id, is_anonymous, expires_at, like_count, comment_count, created_at, status, target:users!posts_target_user_id_fkey(handle, display_name), author:users!posts_author_user_id_fkey(handle, display_name)"
     )
     .eq("id", id)
     .single();
@@ -33,6 +33,10 @@ export default async function ThreadPage({
   if (!post) notFound();
 
   const target = post.target as unknown as {
+    handle: string;
+    display_name: string | null;
+  } | null;
+  const postAuthor = post.author as unknown as {
     handle: string;
     display_name: string | null;
   } | null;
@@ -52,39 +56,75 @@ export default async function ThreadPage({
   // Fetch all comments for this post, chronological order
   const { data: comments } = await supabase
     .from("comments")
-    .select("id, body, author_user_id, created_at, status")
+    .select("id, body, author_user_id, created_at, status, is_anonymous, author:users!comments_author_user_id_fkey(handle, display_name)")
     .eq("post_id", post.id)
     .order("created_at", { ascending: true });
 
-  // Build anonymous identity map
+  // Build anonymous identity map (only for anonymous participants)
   const anonMap = new Map<string, number>();
-  let counter = 1;
-  anonMap.set(post.author_user_id, counter++); // OP is always Anon 1
+  let anonCounter = 1;
 
+  // If OP posted anonymously, reserve Anon 1 for them
+  if (post.is_anonymous) {
+    anonMap.set(post.author_user_id, anonCounter++);
+  }
+
+  // Assign anon numbers to anonymous commenters
   for (const comment of comments ?? []) {
-    if (!anonMap.has(comment.author_user_id)) {
-      anonMap.set(comment.author_user_id, counter++);
+    if (comment.is_anonymous && !anonMap.has(comment.author_user_id)) {
+      anonMap.set(comment.author_user_id, anonCounter++);
     }
   }
 
-  // Transform to safe comments (strip user IDs)
-  const safeComments: SafeComment[] = (comments ?? []).map((c) => ({
-    id: c.id,
-    body: c.body,
-    createdAt: c.created_at,
-    anonNumber: anonMap.get(c.author_user_id) ?? 0,
-    isCurrentUser: c.author_user_id === user.id,
-    status: c.status,
-  }));
+  // Determine current user's existing identity choice in this thread
+  const currentUserComment = (comments ?? []).find(
+    (c) => c.author_user_id === user.id
+  );
+  const hasChosenIdentity = !!currentUserComment;
+  const chosenIsAnonymous = currentUserComment?.is_anonymous ?? null;
+
+  // Get current user's handle for the composer
+  const { data: currentUserProfile } = await supabase
+    .from("users")
+    .select("handle")
+    .eq("id", user.id)
+    .single();
+
+  // Determine identity mode for composer
+  let identityMode: "anonymous" | "revealed" | "choose" = "choose";
+  if (hasChosenIdentity) {
+    identityMode = chosenIsAnonymous ? "anonymous" : "revealed";
+  }
 
   const currentUserAnonNumber = anonMap.get(user.id) ?? null;
 
+  // Transform to safe comments (strip user IDs)
+  const safeComments: SafeComment[] = (comments ?? []).map((c) => {
+    const commentAuthor = c.author as unknown as {
+      handle: string;
+      display_name: string | null;
+    } | null;
+    return {
+      id: c.id,
+      body: c.body,
+      createdAt: c.created_at,
+      isAnonymous: c.is_anonymous,
+      anonNumber: c.is_anonymous ? (anonMap.get(c.author_user_id) ?? 0) : null,
+      handle: c.is_anonymous ? null : (commentAuthor?.handle ?? null),
+      displayName: c.is_anonymous ? null : (commentAuthor?.display_name ?? null),
+      isCurrentUser: c.author_user_id === user.id,
+      isOp: c.author_user_id === post.author_user_id,
+      status: c.status,
+    };
+  });
+
   // Bind the server action with postId
   async function boundCreateComment(
-    body: string
+    body: string,
+    isAnonymous: boolean
   ): Promise<{ error?: string; success?: boolean }> {
     "use server";
-    return createComment(id, body);
+    return createComment(id, body, isAnonymous);
   }
 
   return (
@@ -110,6 +150,9 @@ export default async function ThreadPage({
           body={post.body}
           targetHandle={target?.handle ?? "unknown"}
           targetDisplayName={target?.display_name ?? null}
+          isAnonymous={post.is_anonymous}
+          authorHandle={postAuthor?.handle ?? null}
+          authorDisplayName={postAuthor?.display_name ?? null}
           expiresAt={post.expires_at}
           likeCount={post.like_count}
           commentCount={post.comment_count}
@@ -139,6 +182,8 @@ export default async function ThreadPage({
       {isActive && (
         <CommentComposer
           action={boundCreateComment}
+          identityMode={identityMode}
+          userHandle={currentUserProfile?.handle ?? ""}
           currentUserAnonNumber={currentUserAnonNumber}
         />
       )}

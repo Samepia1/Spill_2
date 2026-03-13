@@ -22,7 +22,7 @@ export default async function FeedPage({
   let query = supabase
     .from("posts")
     .select(
-      "id, subject, body, target_user_id, expires_at, like_count, comment_count, created_at, target:users!posts_target_user_id_fkey(handle, display_name)"
+      "id, subject, body, target_user_id, is_anonymous, expires_at, like_count, comment_count, created_at, target:users!posts_target_user_id_fkey(handle, display_name), author:users!posts_author_user_id_fkey(handle, display_name)"
     )
     .eq("status", "active")
     .or(`expires_at.is.null,expires_at.gt.${now}`);
@@ -85,6 +85,10 @@ export default async function FeedPage({
               handle: string;
               display_name: string | null;
             } | null;
+            const author = post.author as unknown as {
+              handle: string;
+              display_name: string | null;
+            } | null;
             return (
               <PostCard
                 key={post.id}
@@ -93,6 +97,9 @@ export default async function FeedPage({
                 body={post.body}
                 targetHandle={target?.handle ?? "unknown"}
                 targetDisplayName={target?.display_name ?? null}
+                isAnonymous={post.is_anonymous}
+                authorHandle={author?.handle ?? null}
+                authorDisplayName={author?.display_name ?? null}
                 expiresAt={post.expires_at}
                 likeCount={post.like_count}
                 commentCount={post.comment_count}

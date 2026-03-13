@@ -117,13 +117,17 @@ export async function createPost(formData: FormData) {
     expires_at = new Date(Date.now() + hours * 60 * 60 * 1000).toISOString();
   }
 
-  // 12. Insert the post
+  // 12. Determine anonymity
+  const isAnonymous = formData.get("isAnonymous") !== "false";
+
+  // 13. Insert the post
   const { error: insertError } = await supabase.from("posts").insert({
     university_id: profile.university_id,
     author_user_id: user.id,
     target_user_id: target.id,
     subject: trimmedSubject,
     body: trimmedBody,
+    is_anonymous: isAnonymous,
     ...(expires_at ? { expires_at } : {}),
   });
 
@@ -132,6 +136,22 @@ export async function createPost(formData: FormData) {
   }
 
   redirect("/");
+}
+
+export async function getCurrentUserHandle(): Promise<string | null> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return null;
+
+  const { data } = await supabase
+    .from("users")
+    .select("handle")
+    .eq("id", user.id)
+    .single();
+
+  return data?.handle ?? null;
 }
 
 export async function searchTargetUsers(query: string): Promise<

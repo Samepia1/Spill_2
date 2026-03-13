@@ -8,8 +8,12 @@ export type SafeComment = {
   id: string;
   body: string;
   createdAt: string;
-  anonNumber: number;
+  isAnonymous: boolean;
+  anonNumber: number | null;
+  handle: string | null;
+  displayName: string | null;
   isCurrentUser: boolean;
+  isOp: boolean;
   status: string;
 };
 
@@ -36,13 +40,15 @@ export default function CommentList({ comments }: { comments: SafeComment[] }) {
           <div className="mb-1 flex items-center gap-2">
             <span
               className={`text-sm font-semibold ${
-                comment.anonNumber === 1
+                comment.isOp
                   ? "text-violet-600 dark:text-violet-400"
                   : "text-zinc-700 dark:text-zinc-300"
               }`}
             >
-              Anon {comment.anonNumber}
-              {comment.anonNumber === 1 && (
+              {comment.isAnonymous
+                ? `Anon ${comment.anonNumber}`
+                : `@${comment.handle}`}
+              {comment.isOp && (
                 <span className="ml-1 text-xs font-normal text-violet-500 dark:text-violet-400">
                   (OP)
                 </span>

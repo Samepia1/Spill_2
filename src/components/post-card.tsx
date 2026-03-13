@@ -12,6 +12,9 @@ export type PostCardProps = {
   body: string;
   targetHandle: string;
   targetDisplayName: string | null;
+  isAnonymous: boolean;
+  authorHandle: string | null;
+  authorDisplayName: string | null;
   expiresAt: string | null;
   likeCount: number;
   commentCount: number;
@@ -25,6 +28,9 @@ export default function PostCard({
   body,
   targetHandle,
   targetDisplayName,
+  isAnonymous,
+  authorHandle,
+  authorDisplayName,
   expiresAt,
   likeCount,
   commentCount,
@@ -56,19 +62,32 @@ export default function PostCard({
 
   return (
     <article className="rounded-xl border border-zinc-100 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
-      {/* Header: target + time remaining */}
+      {/* Header: author → target + time remaining */}
       <div className="mb-2 flex items-center justify-between">
-        <Link
-          href={`/profile/${targetHandle}`}
-          className="text-sm text-zinc-500 transition-colors hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200"
-        >
-          @{targetHandle}
-          {targetDisplayName && (
-            <span className="ml-1 text-zinc-400 dark:text-zinc-500">
-              ({targetDisplayName})
-            </span>
+        <div className="flex items-center gap-1 text-sm">
+          {isAnonymous ? (
+            <span className="font-medium text-zinc-400 dark:text-zinc-500">Anonymous</span>
+          ) : (
+            <Link
+              href={`/profile/${authorHandle}`}
+              className="font-medium text-zinc-600 transition-colors hover:text-zinc-800 dark:text-zinc-300 dark:hover:text-zinc-100"
+            >
+              @{authorHandle}
+              {authorDisplayName && (
+                <span className="ml-1 font-normal text-zinc-400 dark:text-zinc-500">
+                  ({authorDisplayName})
+                </span>
+              )}
+            </Link>
           )}
-        </Link>
+          <span className="text-zinc-300 dark:text-zinc-600">→</span>
+          <Link
+            href={`/profile/${targetHandle}`}
+            className="text-zinc-500 transition-colors hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200"
+          >
+            @{targetHandle}
+          </Link>
+        </div>
 
         {remaining && (
           <span

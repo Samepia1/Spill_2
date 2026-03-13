@@ -40,15 +40,16 @@ export default async function ProfileHandlePage({
       ? sort
       : "newest";
 
-  // Fetch active, non-expired posts targeting this user
+  // Fetch active posts targeting this user (non-expired or no expiration)
+  const now = new Date().toISOString();
   let query = supabase
     .from("posts")
     .select(
-      "id, subject, body, expires_at, like_count, comment_count, created_at, target:users!posts_target_user_id_fkey(handle, display_name)"
+      "id, subject, body, is_anonymous, expires_at, like_count, comment_count, created_at, target:users!posts_target_user_id_fkey(handle, display_name), author:users!posts_author_user_id_fkey(handle, display_name)"
     )
     .eq("target_user_id", profileUser.id)
     .eq("status", "active")
-    .gt("expires_at", new Date().toISOString());
+    .or(`expires_at.is.null,expires_at.gt.${now}`);
 
   if (activeSort === "top") {
     query = query.order("like_count", { ascending: false });
@@ -144,6 +145,10 @@ export default async function ProfileHandlePage({
               handle: string;
               display_name: string | null;
             } | null;
+            const author = post.author as unknown as {
+              handle: string;
+              display_name: string | null;
+            } | null;
             return (
               <PostCard
                 key={post.id}
@@ -152,6 +157,9 @@ export default async function ProfileHandlePage({
                 body={post.body}
                 targetHandle={target?.handle ?? "unknown"}
                 targetDisplayName={target?.display_name ?? null}
+                isAnonymous={post.is_anonymous}
+                authorHandle={author?.handle ?? null}
+                authorDisplayName={author?.display_name ?? null}
                 expiresAt={post.expires_at}
                 likeCount={post.like_count}
                 commentCount={post.comment_count}

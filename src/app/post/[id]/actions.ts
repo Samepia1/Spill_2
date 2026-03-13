@@ -3,7 +3,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
 
-export async function createComment(postId: string, body: string) {
+export async function createComment(postId: string, body: string, isAnonymous: boolean = true) {
   const trimmed = body?.trim() ?? "";
 
   if (trimmed.length < 1 || trimmed.length > 300) {
@@ -58,6 +58,19 @@ export async function createComment(postId: string, body: string) {
     return { error: "This post has expired" };
   }
 
+  // Enforce identity consistency: if user has previous comments, must match
+  const { data: existingComment } = await supabase
+    .from("comments")
+    .select("is_anonymous")
+    .eq("post_id", postId)
+    .eq("author_user_id", user.id)
+    .limit(1)
+    .maybeSingle();
+
+  if (existingComment && existingComment.is_anonymous !== isAnonymous) {
+    return { error: "You cannot change your identity mode in this thread" };
+  }
+
   // Rate limit: max 10 comments per post per user per hour
   const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
   const { count } = await supabase
@@ -77,6 +90,7 @@ export async function createComment(postId: string, body: string) {
     university_id: profile.university_id,
     author_user_id: user.id,
     body: trimmed,
+    is_anonymous: isAnonymous,
   });
 
   if (insertError) {
