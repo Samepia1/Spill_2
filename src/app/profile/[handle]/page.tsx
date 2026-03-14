@@ -3,6 +3,8 @@ import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/current-user";
 import PostCard from "@/components/post-card";
+import Avatar from "@/components/avatar";
+import AvatarUpload from "@/components/avatar-upload";
 
 type SortValue = "top" | "newest" | "comments" | "ending";
 
@@ -26,7 +28,7 @@ export default async function ProfileHandlePage({
   // Look up the profile user by handle
   const { data: profileUser } = await supabase
     .from("users")
-    .select("id, handle, display_name")
+    .select("id, handle, display_name, avatar_url")
     .eq("handle", handle)
     .single();
 
@@ -45,7 +47,7 @@ export default async function ProfileHandlePage({
   let query = supabase
     .from("posts")
     .select(
-      "id, subject, body, is_anonymous, expires_at, like_count, comment_count, created_at, target:users!posts_target_user_id_fkey(handle, display_name), author:users!posts_author_user_id_fkey(handle, display_name)"
+      "id, subject, body, is_anonymous, expires_at, like_count, comment_count, created_at, target:users!posts_target_user_id_fkey(handle, display_name, avatar_url), author:users!posts_author_user_id_fkey(handle, display_name, avatar_url)"
     )
     .eq("target_user_id", profileUser.id)
     .eq("status", "active")
@@ -86,6 +88,21 @@ export default async function ProfileHandlePage({
     <div className="mx-auto max-w-lg">
       {/* Profile header */}
       <header className="px-4 pt-6 pb-4">
+        <div className="mb-3">
+          {isOwnProfile ? (
+            <AvatarUpload
+              userId={profileUser.id}
+              currentAvatarUrl={profileUser.avatar_url}
+              size="lg"
+            />
+          ) : (
+            <Avatar
+              src={profileUser.avatar_url}
+              alt={`@${profileUser.handle}`}
+              size="lg"
+            />
+          )}
+        </div>
         <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-50">
           @{profileUser.handle}
         </h1>
@@ -144,10 +161,12 @@ export default async function ProfileHandlePage({
             const target = post.target as unknown as {
               handle: string;
               display_name: string | null;
+              avatar_url: string | null;
             } | null;
             const author = post.author as unknown as {
               handle: string;
               display_name: string | null;
+              avatar_url: string | null;
             } | null;
             return (
               <PostCard
@@ -160,6 +179,8 @@ export default async function ProfileHandlePage({
                 isAnonymous={post.is_anonymous}
                 authorHandle={author?.handle ?? null}
                 authorDisplayName={author?.display_name ?? null}
+                authorAvatarUrl={author?.avatar_url ?? null}
+                targetAvatarUrl={target?.avatar_url ?? null}
                 expiresAt={post.expires_at}
                 likeCount={post.like_count}
                 commentCount={post.comment_count}

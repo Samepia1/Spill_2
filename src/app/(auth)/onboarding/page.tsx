@@ -1,11 +1,66 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { completeOnboarding } from "../actions";
+import { createClient } from "@/lib/supabase/client";
+import Avatar from "@/components/avatar";
 
 export default function OnboardingPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [userId, setUserId] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const supabase = createClient();
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (user) setUserId(user.id);
+    });
+  }, []);
+
+  async function handleAvatarChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file || !userId) return;
+
+    if (file.size > 2 * 1024 * 1024) {
+      setError("Image must be under 2MB");
+      return;
+    }
+
+    if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+      setError("Only JPEG, PNG, and WebP images are allowed");
+      return;
+    }
+
+    setUploading(true);
+    setError(null);
+
+    try {
+      const supabase = createClient();
+      const ext = file.name.split(".").pop() || "jpg";
+      const path = `${userId}/avatar.${ext}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from("avatars")
+        .upload(path, file, { upsert: true });
+
+      if (uploadError) {
+        setError("Upload failed: " + uploadError.message);
+        return;
+      }
+
+      const {
+        data: { publicUrl },
+      } = supabase.storage.from("avatars").getPublicUrl(path);
+
+      setAvatarUrl(`${publicUrl}?t=${Date.now()}`);
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  }
 
   async function handleSubmit(formData: FormData) {
     setError(null);
@@ -18,6 +73,10 @@ export default function OnboardingPage() {
       );
       setLoading(false);
       return;
+    }
+
+    if (avatarUrl) {
+      formData.set("avatar_url", avatarUrl);
     }
 
     const result = await completeOnboarding(formData);
@@ -37,6 +96,49 @@ export default function OnboardingPage() {
       </p>
 
       <form action={handleSubmit}>
+        {/* Avatar upload */}
+        <div className="mb-5 flex flex-col items-center">
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={uploading}
+            className="group relative cursor-pointer disabled:cursor-wait"
+          >
+            <Avatar src={avatarUrl} alt="Your avatar" size="lg" />
+            <div className="absolute inset-0 flex items-center justify-center rounded-full bg-black/0 transition-colors group-hover:bg-black/40">
+              <svg
+                width="20"
+                height="20"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth={1.5}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="text-white opacity-0 transition-opacity group-hover:opacity-100"
+              >
+                <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
+                <circle cx="12" cy="13" r="4" />
+              </svg>
+            </div>
+            {uploading && (
+              <div className="absolute inset-0 flex items-center justify-center rounded-full bg-black/40">
+                <div className="h-5 w-5 animate-spin rounded-full border-2 border-white border-t-transparent" />
+              </div>
+            )}
+          </button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            onChange={handleAvatarChange}
+            className="hidden"
+          />
+          <p className="mt-2 text-xs text-zinc-400 dark:text-zinc-500">
+            Add a profile photo (optional)
+          </p>
+        </div>
+
         <label
           htmlFor="handle"
           className="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300"

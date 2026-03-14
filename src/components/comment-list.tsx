@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { formatRelativeTime } from "@/lib/time";
 import ReportModal from "@/components/report-modal";
+import Avatar from "@/components/avatar";
 
 export type SafeComment = {
   id: string;
@@ -12,6 +13,7 @@ export type SafeComment = {
   anonNumber: number | null;
   handle: string | null;
   displayName: string | null;
+  avatarUrl: string | null;
   isCurrentUser: boolean;
   isOp: boolean;
   status: string;
@@ -38,6 +40,12 @@ export default function CommentList({ comments }: { comments: SafeComment[] }) {
           className="rounded-lg border border-zinc-100 bg-white p-3 dark:border-zinc-800 dark:bg-zinc-900"
         >
           <div className="mb-1 flex items-center gap-2">
+            <Avatar
+              src={comment.avatarUrl}
+              alt={comment.isAnonymous ? `Anon ${comment.anonNumber}` : `@${comment.handle}`}
+              isAnonymous={comment.isAnonymous}
+              size="xs"
+            />
             <span
               className={`text-sm font-semibold ${
                 comment.isOp

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { timeRemaining } from "@/lib/time";
 import { toggleLike } from "@/app/actions";
 import ReportModal from "@/components/report-modal";
+import Avatar from "@/components/avatar";
 
 export type PostCardProps = {
   id: string;
@@ -15,6 +16,8 @@ export type PostCardProps = {
   isAnonymous: boolean;
   authorHandle: string | null;
   authorDisplayName: string | null;
+  authorAvatarUrl: string | null;
+  targetAvatarUrl: string | null;
   expiresAt: string | null;
   likeCount: number;
   commentCount: number;
@@ -31,6 +34,8 @@ export default function PostCard({
   isAnonymous,
   authorHandle,
   authorDisplayName,
+  authorAvatarUrl,
+  targetAvatarUrl,
   expiresAt,
   likeCount,
   commentCount,
@@ -64,7 +69,8 @@ export default function PostCard({
     <article className="rounded-xl border border-zinc-100 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
       {/* Header: author → target + time remaining */}
       <div className="mb-2 flex items-center justify-between">
-        <div className="flex items-center gap-1 text-sm">
+        <div className="flex items-center gap-1.5 text-sm">
+          <Avatar src={authorAvatarUrl} alt={isAnonymous ? "Anonymous" : `@${authorHandle}`} isAnonymous={isAnonymous} size="sm" />
           {isAnonymous ? (
             <span className="font-medium text-zinc-400 dark:text-zinc-500">Anonymous</span>
           ) : (
@@ -76,6 +82,7 @@ export default function PostCard({
             </Link>
           )}
           <span className="text-zinc-300 dark:text-zinc-600">→</span>
+          <Avatar src={targetAvatarUrl} alt={`@${targetHandle}`} size="xs" />
           <Link
             href={`/profile/${targetHandle}`}
             className="text-zinc-500 transition-colors hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200"

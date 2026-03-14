@@ -96,6 +96,7 @@ export async function resendOtp(formData: FormData) {
 export async function completeOnboarding(formData: FormData) {
   const handle = formData.get("handle") as string;
   const displayName = (formData.get("display_name") as string) || null;
+  const avatarUrl = (formData.get("avatar_url") as string) || null;
 
   if (!handle || !/^[a-zA-Z0-9_]{3,20}$/.test(handle)) {
     return {
@@ -134,6 +135,7 @@ export async function completeOnboarding(formData: FormData) {
     email_verified: true,
     handle,
     display_name: displayName,
+    ...(avatarUrl ? { avatar_url: avatarUrl } : {}),
   });
 
   if (error) {

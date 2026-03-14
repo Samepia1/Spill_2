@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import Link from "next/link";
 import { searchUsersRanked, type RankedUser } from "./actions";
+import Avatar from "@/components/avatar";
 
 export default function SearchPage() {
   const [query, setQuery] = useState("");
@@ -69,7 +70,7 @@ export default function SearchPage() {
         type="text"
         value={query}
         onChange={(e) => setQuery(e.target.value)}
-        placeholder="Search by handle..."
+        placeholder="Search by handle or name..."
         className="mb-4 w-full rounded-lg border border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-900 placeholder-zinc-400 focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-500 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-50 dark:placeholder-zinc-500"
       />
 
@@ -93,15 +94,18 @@ export default function SearchPage() {
               href={`/profile/${user.handle}`}
               className="flex items-center justify-between rounded-lg border border-zinc-200 bg-white px-4 py-3 transition-colors hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-900 dark:hover:bg-zinc-800"
             >
-              <div>
-                <span className="font-semibold text-zinc-900 dark:text-zinc-50">
-                  @{user.handle}
-                </span>
+              <div className="flex items-center gap-3">
+                <Avatar src={user.avatar_url} alt={`@${user.handle}`} size="sm" />
+                <div>
+                  <span className="font-semibold text-zinc-900 dark:text-zinc-50">
+                    @{user.handle}
+                  </span>
                 {user.display_name && (
                   <span className="ml-2 text-sm text-zinc-500 dark:text-zinc-400">
                     {user.display_name}
                   </span>
                 )}
+                </div>
               </div>
               {user.activity > 0 && (
                 <span className="text-xs text-zinc-400 dark:text-zinc-500">

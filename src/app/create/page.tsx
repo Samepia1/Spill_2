@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { searchTargetUsers, createPost, getCurrentUserHandle } from "./actions";
+import Avatar from "@/components/avatar";
 
 function CreatePostForm() {
   const searchParams = useSearchParams();
@@ -14,7 +15,7 @@ function CreatePostForm() {
   );
   const [targetQuery, setTargetQuery] = useState("");
   const [targetResults, setTargetResults] = useState<
-    Array<{ id: string; handle: string; display_name: string | null }>
+    Array<{ id: string; handle: string; display_name: string | null; avatar_url: string | null }>
   >([]);
   const [showTargetPicker, setShowTargetPicker] = useState(false);
   const [subject, setSubject] = useState("");
@@ -69,6 +70,7 @@ function CreatePostForm() {
     id: string;
     handle: string;
     display_name: string | null;
+    avatar_url: string | null;
   }) {
     setTargetHandle(user.handle);
     setTargetDisplayName(user.display_name);
@@ -176,6 +178,7 @@ function CreatePostForm() {
                         onClick={() => selectTarget(user)}
                         className="flex w-full items-center gap-2 px-4 py-2 text-left text-sm hover:bg-zinc-50 dark:hover:bg-zinc-800"
                       >
+                        <Avatar src={user.avatar_url} alt={`@${user.handle}`} size="xs" />
                         <span className="font-medium text-zinc-900 dark:text-zinc-50">
                           @{user.handle}
                         </span>

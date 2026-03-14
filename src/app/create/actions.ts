@@ -160,6 +160,7 @@ export async function searchTargetUsers(query: string): Promise<
         id: string;
         handle: string;
         display_name: string | null;
+        avatar_url: string | null;
       }>;
     }
   | { error: string }
@@ -172,7 +173,7 @@ export async function searchTargetUsers(query: string): Promise<
 
   const { data, error } = await supabase
     .from("users")
-    .select("id, handle, display_name")
+    .select("id, handle, display_name, avatar_url")
     .or(`handle.ilike.%${query}%,display_name.ilike.%${query}%`)
     .limit(10);
 

@@ -1,10 +1,12 @@
 "use client";
 
-import { useTransition } from "react";
+import { useState, useEffect, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useTheme } from "@/components/theme-provider";
-import { signOut } from "./actions";
+import { signOut, getCurrentUserProfile } from "./actions";
+import Avatar from "@/components/avatar";
+import AvatarUpload from "@/components/avatar-upload";
 
 const themeOptions = [
   { value: "light" as const, label: "Light" },
@@ -16,6 +18,15 @@ export default function SettingsPage() {
   const router = useRouter();
   const { theme, setTheme } = useTheme();
   const [isPending, startTransition] = useTransition();
+  const [profile, setProfile] = useState<{
+    id: string;
+    handle: string;
+    avatar_url: string | null;
+  } | null>(null);
+
+  useEffect(() => {
+    getCurrentUserProfile().then(setProfile);
+  }, []);
 
   function handleSignOut() {
     startTransition(async () => {
@@ -54,21 +65,11 @@ export default function SettingsPage() {
         href="/profile"
         className="mb-6 flex items-center gap-3 rounded-xl border border-zinc-100 bg-white p-4 transition-colors hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-900 dark:hover:bg-zinc-800"
       >
-        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400">
-          <svg
-            width="20"
-            height="20"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth={1.5}
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-            <circle cx="12" cy="7" r="4" />
-          </svg>
-        </div>
+        {profile ? (
+          <AvatarUpload userId={profile.id} currentAvatarUrl={profile.avatar_url} size="md" />
+        ) : (
+          <Avatar src={null} alt="Profile" size="md" />
+        )}
         <div>
           <span className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
             View my profile

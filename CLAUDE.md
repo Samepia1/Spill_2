@@ -29,7 +29,9 @@ src/
 │   ├── create/
 │   │   ├── page.tsx            # Post creation form (target picker, subject, body, anonymous toggle, expiration toggle)
 │   │   └── actions.ts          # Server actions: createPost, getCurrentUserHandle, searchTargetUsers
-│   ├── search/page.tsx         # Search users page
+│   ├── search/
+│   │   ├── page.tsx            # Search users page (activity-ranked, infinite scroll)
+│   │   └── actions.ts          # Server action: searchUsersRanked (RPC, paginated)
 │   ├── profile/
 │   │   ├── page.tsx            # Current user's profile (redirects to /profile/[handle])
 │   │   └── [handle]/page.tsx   # Public profile view (posts about this user, sort tabs)
@@ -38,7 +40,7 @@ src/
 │   │   └── actions.ts          # Server action: createComment (with isAnonymous + identity lock)
 │   ├── settings/
 │   │   ├── page.tsx            # Settings page (theme toggle, sign out, profile link, X close button)
-│   │   └── actions.ts          # Server action: signOut
+│   │   └── actions.ts          # Server actions: signOut, updateAvatarUrl, getCurrentUserProfile
 │   └── mod/
 │       ├── page.tsx            # Moderation queue (Open/Reviewed/Dismissed tabs)
 │       ├── actions.ts          # Server actions: removePost, removeComment, suspendUser, dismissReport
@@ -47,9 +49,11 @@ src/
 │   ├── bottom-nav.tsx          # Bottom tab bar (Feed, Search, Post, Profile + conditional Mod tab)
 │   ├── bottom-nav-wrapper.tsx  # Server component — fetches user role, passes isModerator to BottomNav
 │   ├── comment-composer.tsx    # Comment input with identity choice (anonymous/revealed, locked per thread)
-│   ├── comment-list.tsx        # Comment list (Anon N or @handle, OP badge, report flags)
+│   ├── avatar.tsx              # Reusable Avatar component (xs/sm/md/lg, anonymous silhouette, image, placeholder)
+│   ├── avatar-upload.tsx       # Avatar upload component (file picker, Supabase Storage upload, server action save)
+│   ├── comment-list.tsx        # Comment list (Anon N or @handle, OP badge, report flags, avatars)
 │   ├── feed-tabs.tsx           # Trending/New/Ending tab selector
-│   ├── post-card.tsx           # Post card: "Anonymous → @target" or "@author → @target" + like/comment/report
+│   ├── post-card.tsx           # Post card: "[avatar] Anonymous → [avatar] @target" + like/comment/report
 │   ├── report-modal.tsx        # Reusable report modal (reason dropdown, details textarea)
 │   ├── settings-icon.tsx       # Persistent gear icon (fixed top-right, hidden on auth + settings routes)
 │   └── theme-provider.tsx      # ThemeProvider context + useTheme hook (light/dark/system, localStorage)
@@ -71,7 +75,12 @@ supabase/
     ├── 005_counter_triggers.sql              # Triggers for like_count and comment_count
     ├── 006_moderation_rls_policies.sql       # UPDATE policies for moderators on reports, posts, comments, users
     ├── 007_optional_expiration.sql           # expires_at nullable + clear existing expirations
-    └── 008_identity_reveal.sql              # is_anonymous on posts and comments
+    ├── 008_identity_reveal.sql              # is_anonymous on posts and comments
+    ├── 009_search_users_by_activity.sql    # RPC function: search_users_by_activity (ranked search)
+    ├── 010_search_by_name.sql              # Update RPC to search by handle OR display_name
+    ├── 011_avatar_url.sql                  # Add avatar_url column to users table
+    ├── 012_avatar_storage.sql              # Create avatars storage bucket + RLS policies
+    └── 013_search_rpc_avatar.sql           # Update search RPC to return avatar_url
 ```
 
 ## Auth Flow (fully working)
@@ -92,7 +101,7 @@ supabase/
 
 ## Database Schema (key tables)
 - **universities**: id, name, email_domain (seeded with umn.edu, test.edu)
-- **users**: id (refs auth.users), university_id, email, handle, display_name, role (`user`/`moderator`/`admin`), status (`active`/`suspended`/`deleted`)
+- **users**: id (refs auth.users), university_id, email, handle, display_name, avatar_url (nullable), role (`user`/`moderator`/`admin`), status (`active`/`suspended`/`deleted`)
 - **posts**: id, university_id, author_user_id, target_user_id, subject (1-200 chars), body (1-1000 chars), is_anonymous (bool, default true), expires_at (nullable timestamptz), like_count, comment_count, status (`active`/`expired`/`removed`), removed_at, removed_by, removal_reason
 - **comments**: id, post_id, university_id, author_user_id, body (1-300 chars), is_anonymous (bool, default true), parent_comment_id, status (`active`/`removed`), removed_at, removed_by, removal_reason
 - **likes**: post_id + user_id (unique)
@@ -127,7 +136,7 @@ supabase/
 ## Completed Features
 1. **Auth & onboarding**: OTP email flow, .edu validation, handle creation, route protection
 2. **Feed**: trending (decay formula), new, ending soon tabs; PostCard with like/comment/report
-3. **Search & profiles**: user search, public profile with posts-about-user, sort tabs (top/newest/comments/ending)
+3. **Search & profiles**: activity-ranked user search with infinite scroll, public profile with posts-about-user, sort tabs (top/newest/comments/ending)
 4. **Post creation**: target picker (debounced search), subject/body, anonymous toggle, expiration toggle
 5. **Likes**: optimistic UI, counter triggers in DB
 6. **Thread view**: post + comments, anonymous identity system, comment composer with identity choice
@@ -136,6 +145,8 @@ supabase/
 9. **Identity reveal**: anonymous/revealed for both posts and comments, per-thread locked comment identity
 10. **Deployment**: Vercel (auto-deploy from GitHub), Supabase hosted DB
 11. **Settings page**: theme toggle (light/dark/system) with localStorage persistence, sign-out button, profile link, gear icon on all pages, X close button to go back
+12. **Activity-ranked search**: users ranked by posts about them + comments on those posts, Supabase RPC with pagination, IntersectionObserver infinite scroll
+13. **Avatars**: user-uploaded profile pictures via Supabase Storage. Displayed in post cards, comments, search results, target picker, profile pages, and settings. Anonymous posts/comments always show a generic silhouette. Upload available during onboarding, from settings, and from own profile page.
 
 ## Theme System
 - **Class-based dark mode**: Tailwind v4 `@custom-variant dark` in `globals.css` — activates `dark:` utilities via `.dark` class on `<html>`
@@ -143,6 +154,14 @@ supabase/
 - **FOUC prevention**: inline `<script>` in `layout.tsx` `<head>` reads localStorage and sets `.dark` class before paint
 - **Settings access**: gear icon (`src/components/settings-icon.tsx`) fixed top-right on all pages, hidden on auth routes and `/settings`
 - **Settings page** (`/settings`): theme toggle (3 buttons), sign-out, profile link, fixed X close button (same position as gear icon) that navigates back via `router.back()`
+
+## Search System
+- **RPC function** `search_users_by_activity`: Supabase SQL function that ranks users by activity (posts targeting them + comment_count on those posts)
+- **On load**: shows top 20 users by activity at the user's university (no typing needed)
+- **On search**: debounced (300ms) handle or display_name filter, still ranked by activity
+- **Pagination**: `LIMIT`/`OFFSET` in the RPC, 20 results per page
+- **Infinite scroll**: `IntersectionObserver` on sentinel div, auto-fetches next page when scrolled near bottom
+- **Future optimization**: consider a materialized `user_activity` table refreshed on a schedule instead of computing on the fly
 
 ## What's Next
 The spec document is at `Spill_Project_Description.txt`. Remaining features may include: notifications, user profile editing, admin panel, and further polish.
@@ -167,3 +186,6 @@ npm run lint   # ESLint
 - **Server actions in thread**: `boundCreateComment` wraps `createComment` with post ID closure via `"use server"` inline
 - **Anonymous numbering**: built server-side in thread page, only anonymous participants get numbers, stripped from client via SafeComment type
 - **Client components needing server data**: use server actions called in useEffect (e.g., `getCurrentUserHandle` in create form)
+- **Avatar privacy**: anonymous posts/comments must never expose the real avatar. Two layers: (1) `Avatar` component ignores `src` when `isAnonymous=true`, (2) SafeComment sets `avatarUrl: null` when `is_anonymous=true` server-side
+- **Avatar uploads**: client-side upload to Supabase Storage at `{userId}/avatar.{ext}`, then server action saves public URL to `users.avatar_url`. Cache-busting `?t=timestamp` appended after upload.
+- **Supabase Storage bucket**: `avatars` (public, 2MB limit, JPEG/PNG/WebP only). RLS: users can upload/update/delete their own folder, public read.

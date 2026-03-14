@@ -25,7 +25,7 @@ export default async function ThreadPage({
   const { data: post } = await supabase
     .from("posts")
     .select(
-      "id, subject, body, author_user_id, target_user_id, university_id, is_anonymous, expires_at, like_count, comment_count, created_at, status, target:users!posts_target_user_id_fkey(handle, display_name), author:users!posts_author_user_id_fkey(handle, display_name)"
+      "id, subject, body, author_user_id, target_user_id, university_id, is_anonymous, expires_at, like_count, comment_count, created_at, status, target:users!posts_target_user_id_fkey(handle, display_name, avatar_url), author:users!posts_author_user_id_fkey(handle, display_name, avatar_url)"
     )
     .eq("id", id)
     .single();
@@ -35,10 +35,12 @@ export default async function ThreadPage({
   const target = post.target as unknown as {
     handle: string;
     display_name: string | null;
+    avatar_url: string | null;
   } | null;
   const postAuthor = post.author as unknown as {
     handle: string;
     display_name: string | null;
+    avatar_url: string | null;
   } | null;
 
   const remaining = timeRemaining(post.expires_at);
@@ -56,7 +58,7 @@ export default async function ThreadPage({
   // Fetch all comments for this post, chronological order
   const { data: comments } = await supabase
     .from("comments")
-    .select("id, body, author_user_id, created_at, status, is_anonymous, author:users!comments_author_user_id_fkey(handle, display_name)")
+    .select("id, body, author_user_id, created_at, status, is_anonymous, author:users!comments_author_user_id_fkey(handle, display_name, avatar_url)")
     .eq("post_id", post.id)
     .order("created_at", { ascending: true });
 
@@ -103,6 +105,7 @@ export default async function ThreadPage({
     const commentAuthor = c.author as unknown as {
       handle: string;
       display_name: string | null;
+      avatar_url: string | null;
     } | null;
     return {
       id: c.id,
@@ -112,6 +115,7 @@ export default async function ThreadPage({
       anonNumber: c.is_anonymous ? (anonMap.get(c.author_user_id) ?? 0) : null,
       handle: c.is_anonymous ? null : (commentAuthor?.handle ?? null),
       displayName: c.is_anonymous ? null : (commentAuthor?.display_name ?? null),
+      avatarUrl: c.is_anonymous ? null : (commentAuthor?.avatar_url ?? null),
       isCurrentUser: c.author_user_id === user.id,
       isOp: c.author_user_id === post.author_user_id,
       status: c.status,
@@ -153,6 +157,8 @@ export default async function ThreadPage({
           isAnonymous={post.is_anonymous}
           authorHandle={postAuthor?.handle ?? null}
           authorDisplayName={postAuthor?.display_name ?? null}
+          authorAvatarUrl={postAuthor?.avatar_url ?? null}
+          targetAvatarUrl={target?.avatar_url ?? null}
           expiresAt={post.expires_at}
           likeCount={post.like_count}
           commentCount={post.comment_count}
