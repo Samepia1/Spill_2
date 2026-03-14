@@ -148,7 +148,7 @@ function CreatePostForm() {
                 <button
                   type="button"
                   onClick={clearTarget}
-                  className="ml-1 text-zinc-400 hover:text-zinc-600 dark:text-zinc-500 dark:hover:text-zinc-300"
+                  className="ml-1 text-zinc-400 hover:text-zinc-600 dark:text-zinc-500 dark:hover:text-zinc-300 active:opacity-60"
                   aria-label="Remove target"
                 >
                   &times;
@@ -176,7 +176,7 @@ function CreatePostForm() {
                       <button
                         type="button"
                         onClick={() => selectTarget(user)}
-                        className="flex w-full items-center gap-2 px-4 py-2 text-left text-sm hover:bg-zinc-50 dark:hover:bg-zinc-800"
+                        className="flex w-full items-center gap-2 px-4 py-2 text-left text-sm hover:bg-zinc-50 active:bg-zinc-100 dark:hover:bg-zinc-800 dark:active:bg-zinc-700"
                       >
                         <Avatar src={user.avatar_url} alt={`@${user.handle}`} size="xs" />
                         <span className="font-medium text-zinc-900 dark:text-zinc-50">
@@ -264,7 +264,7 @@ function CreatePostForm() {
               role="switch"
               aria-checked={isAnonymous}
               onClick={() => setIsAnonymous(!isAnonymous)}
-              className={`relative inline-flex h-6 w-11 shrink-0 rounded-full border-2 border-transparent transition-colors ${
+              className={`relative inline-flex h-6 w-11 shrink-0 rounded-full border-2 border-transparent transition-colors active:scale-[0.95] ${
                 isAnonymous
                   ? "bg-zinc-900 dark:bg-zinc-100"
                   : "bg-zinc-200 dark:bg-zinc-700"
@@ -295,7 +295,7 @@ function CreatePostForm() {
               role="switch"
               aria-checked={expires}
               onClick={() => setExpires(!expires)}
-              className={`relative inline-flex h-6 w-11 shrink-0 rounded-full border-2 border-transparent transition-colors ${
+              className={`relative inline-flex h-6 w-11 shrink-0 rounded-full border-2 border-transparent transition-colors active:scale-[0.95] ${
                 expires
                   ? "bg-zinc-900 dark:bg-zinc-100"
                   : "bg-zinc-200 dark:bg-zinc-700"
@@ -337,7 +337,7 @@ function CreatePostForm() {
         <button
           type="submit"
           disabled={!canSubmit}
-          className="w-full rounded-lg bg-zinc-900 py-3 text-sm font-medium text-white transition-colors hover:bg-zinc-800 disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200"
+          className="w-full rounded-lg bg-zinc-900 py-3 text-sm font-medium text-white transition-all duration-150 hover:bg-zinc-800 active:scale-[0.97] disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200"
         >
           {loading ? "Posting..." : "Post"}
         </button>

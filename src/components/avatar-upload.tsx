@@ -79,7 +79,7 @@ export default function AvatarUpload({
         type="button"
         onClick={() => fileInputRef.current?.click()}
         disabled={uploading}
-        className="group relative cursor-pointer disabled:cursor-wait"
+        className="group relative cursor-pointer active:opacity-80 disabled:cursor-wait"
       >
         <Avatar src={avatarUrl} alt="Your avatar" size={size} />
         <div className="absolute inset-0 flex items-center justify-center rounded-full bg-black/0 transition-colors group-hover:bg-black/40">

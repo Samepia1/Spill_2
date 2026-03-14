@@ -179,7 +179,7 @@ export default function ReportCard({
       {/* Expand/collapse button */}
       <button
         onClick={loadContent}
-        className="mb-2 text-sm font-medium text-violet-600 transition-colors hover:text-violet-700 dark:text-violet-400 dark:hover:text-violet-300"
+        className="mb-2 text-sm font-medium text-violet-600 transition-colors hover:text-violet-700 dark:text-violet-400 dark:hover:text-violet-300 active:opacity-70"
       >
         {expanded ? "Hide content" : "View content"}
       </button>
@@ -216,7 +216,7 @@ export default function ReportCard({
               <button
                 onClick={() => handleAction("remove_post")}
                 disabled={isPending}
-                className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-colors disabled:opacity-50 ${
+                className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-all duration-150 active:scale-[0.97] disabled:opacity-50 ${
                   actionMode === "remove_post"
                     ? "bg-red-600 text-white hover:bg-red-700"
                     : "bg-red-100 text-red-700 hover:bg-red-200 dark:bg-red-900/30 dark:text-red-400 dark:hover:bg-red-900/50"
@@ -234,7 +234,7 @@ export default function ReportCard({
               <button
                 onClick={() => handleAction("remove_comment")}
                 disabled={isPending}
-                className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-colors disabled:opacity-50 ${
+                className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-all duration-150 active:scale-[0.97] disabled:opacity-50 ${
                   actionMode === "remove_comment"
                     ? "bg-red-600 text-white hover:bg-red-700"
                     : "bg-red-100 text-red-700 hover:bg-red-200 dark:bg-red-900/30 dark:text-red-400 dark:hover:bg-red-900/50"
@@ -252,7 +252,7 @@ export default function ReportCard({
               <button
                 onClick={() => handleAction("suspend_user")}
                 disabled={isPending}
-                className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-colors disabled:opacity-50 ${
+                className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-all duration-150 active:scale-[0.97] disabled:opacity-50 ${
                   actionMode === "suspend_user"
                     ? "bg-red-600 text-white hover:bg-red-700"
                     : "bg-red-100 text-red-700 hover:bg-red-200 dark:bg-red-900/30 dark:text-red-400 dark:hover:bg-red-900/50"
@@ -269,7 +269,7 @@ export default function ReportCard({
             <button
               onClick={() => handleAction("dismiss")}
               disabled={isPending}
-              className="rounded-lg bg-zinc-100 px-3 py-1.5 text-sm font-medium text-zinc-700 transition-colors hover:bg-zinc-200 disabled:opacity-50 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700"
+              className="rounded-lg bg-zinc-100 px-3 py-1.5 text-sm font-medium text-zinc-700 transition-all duration-150 hover:bg-zinc-200 active:scale-[0.97] disabled:opacity-50 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700"
             >
               {isPending && !actionMode ? "Dismissing..." : "Dismiss"}
             </button>
@@ -281,7 +281,7 @@ export default function ReportCard({
                   setActionReason("");
                   setError("");
                 }}
-                className="rounded-lg px-3 py-1.5 text-sm font-medium text-zinc-500 transition-colors hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200"
+                className="rounded-lg px-3 py-1.5 text-sm font-medium text-zinc-500 transition-colors hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200 active:opacity-70"
               >
                 Cancel
               </button>

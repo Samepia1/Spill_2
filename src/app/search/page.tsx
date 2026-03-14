@@ -92,7 +92,7 @@ export default function SearchPage() {
             <Link
               key={user.id}
               href={`/profile/${user.handle}`}
-              className="flex items-center justify-between rounded-lg border border-zinc-200 bg-white px-4 py-3 transition-colors hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-900 dark:hover:bg-zinc-800"
+              className="flex items-center justify-between rounded-lg border border-zinc-200 bg-white px-4 py-3 transition-all duration-150 hover:bg-zinc-50 active:scale-[0.98] dark:border-zinc-800 dark:bg-zinc-900 dark:hover:bg-zinc-800"
             >
               <div className="flex items-center gap-3">
                 <Avatar src={user.avatar_url} alt={`@${user.handle}`} size="sm" />

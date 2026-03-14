@@ -5,15 +5,9 @@ import { getCurrentUser } from "@/lib/current-user";
 import PostCard from "@/components/post-card";
 import Avatar from "@/components/avatar";
 import AvatarUpload from "@/components/avatar-upload";
+import ProfileSortTabs from "@/components/profile-sort-tabs";
 
 type SortValue = "top" | "newest" | "comments" | "ending";
-
-const sortTabs: { label: string; value: SortValue }[] = [
-  { label: "Top", value: "top" },
-  { label: "Newest", value: "newest" },
-  { label: "Most Comments", value: "comments" },
-  { label: "Ending Soon", value: "ending" },
-];
 
 export default async function ProfileHandlePage({
   params,
@@ -114,7 +108,7 @@ export default async function ProfileHandlePage({
         {!isOwnProfile && (
           <Link
             href={`/create?target=${profileUser.handle}`}
-            className="mt-3 inline-block rounded-lg bg-zinc-900 px-4 py-2 text-sm text-white transition-colors hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200"
+            className="mt-3 inline-block rounded-lg bg-zinc-900 px-4 py-2 text-sm text-white transition-all duration-150 hover:bg-zinc-800 active:scale-[0.97] dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200"
           >
             Create a post about @{profileUser.handle}
           </Link>
@@ -122,33 +116,7 @@ export default async function ProfileHandlePage({
       </header>
 
       {/* Sort tabs */}
-      <div className="border-b border-zinc-200 dark:border-zinc-800">
-        <div className="flex gap-1 px-4">
-          {sortTabs.map((tab) => {
-            const isActive = activeSort === tab.value;
-            const href =
-              tab.value === "newest"
-                ? `/profile/${handle}`
-                : `/profile/${handle}?sort=${tab.value}`;
-            return (
-              <Link
-                key={tab.value}
-                href={href}
-                className={`relative px-4 py-3 text-sm transition-colors ${
-                  isActive
-                    ? "font-semibold text-zinc-900 dark:text-zinc-100"
-                    : "text-zinc-400 dark:text-zinc-500"
-                }`}
-              >
-                {tab.label}
-                {isActive && (
-                  <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-zinc-900 dark:bg-zinc-100" />
-                )}
-              </Link>
-            );
-          })}
-        </div>
-      </div>
+      <ProfileSortTabs handle={handle} />
 
       {/* Posts list */}
       <div className="flex flex-col gap-3 p-4">

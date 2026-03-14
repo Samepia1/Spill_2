@@ -76,7 +76,7 @@ export default function PostCard({
           ) : (
             <Link
               href={`/profile/${authorHandle}`}
-              className="font-medium text-zinc-600 transition-colors hover:text-zinc-800 dark:text-zinc-300 dark:hover:text-zinc-100"
+              className="font-medium text-zinc-600 transition-colors hover:text-zinc-800 dark:text-zinc-300 dark:hover:text-zinc-100 active:opacity-70"
             >
               @{authorHandle}
             </Link>
@@ -85,7 +85,7 @@ export default function PostCard({
           <Avatar src={targetAvatarUrl} alt={`@${targetHandle}`} size="xs" />
           <Link
             href={`/profile/${targetHandle}`}
-            className="text-zinc-500 transition-colors hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200"
+            className="text-zinc-500 transition-colors hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200 active:opacity-70"
           >
             @{targetHandle}
           </Link>
@@ -119,7 +119,7 @@ export default function PostCard({
         <button
           onClick={handleLike}
           disabled={isPending}
-          className={`flex items-center gap-1.5 text-sm transition-colors ${
+          className={`flex items-center gap-1.5 text-sm transition-colors active:opacity-60 ${
             optimisticLiked
               ? "text-red-500 dark:text-red-400"
               : "text-zinc-400 hover:text-red-500 dark:text-zinc-500 dark:hover:text-red-400"
@@ -131,7 +131,7 @@ export default function PostCard({
 
         <Link
           href={`/post/${id}`}
-          className="flex items-center gap-1.5 text-sm text-zinc-400 transition-colors hover:text-zinc-600 dark:text-zinc-500 dark:hover:text-zinc-300"
+          className="flex items-center gap-1.5 text-sm text-zinc-400 transition-colors hover:text-zinc-600 dark:text-zinc-500 dark:hover:text-zinc-300 active:opacity-60"
         >
           <ChatIcon />
           <span>{commentCount}</span>
@@ -139,7 +139,7 @@ export default function PostCard({
 
         <button
           onClick={() => setShowReport(true)}
-          className="ml-auto flex items-center gap-1 text-sm text-zinc-400 transition-colors hover:text-orange-500 dark:text-zinc-500 dark:hover:text-orange-400"
+          className="ml-auto flex items-center gap-1 text-sm text-zinc-400 transition-colors hover:text-orange-500 dark:text-zinc-500 dark:hover:text-orange-400 active:opacity-60"
         >
           <FlagIcon />
         </button>

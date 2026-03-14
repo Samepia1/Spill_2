@@ -137,7 +137,7 @@ export default async function ThreadPage({
       <header className="flex items-center gap-3 px-4 pt-4 pb-2">
         <Link
           href="/"
-          className="text-sm text-zinc-500 transition-colors hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200"
+          className="text-sm text-zinc-500 transition-colors hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200 active:opacity-60"
         >
           <BackIcon />
         </Link>

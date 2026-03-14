@@ -38,7 +38,7 @@ export default function SettingsPage() {
     <div className="mx-auto max-w-lg px-4 pt-6">
       <button
         onClick={() => router.back()}
-        className="fixed top-4 right-4 z-50 rounded-full bg-white/80 p-2 text-zinc-500 shadow-sm backdrop-blur-sm transition-colors hover:text-zinc-800 dark:bg-zinc-900/80 dark:text-zinc-400 dark:hover:text-zinc-100"
+        className="fixed top-4 right-4 z-50 rounded-full bg-white/80 p-2 text-zinc-500 shadow-sm backdrop-blur-sm transition-all duration-150 hover:text-zinc-800 active:scale-[0.90] dark:bg-zinc-900/80 dark:text-zinc-400 dark:hover:text-zinc-100"
         aria-label="Close settings"
       >
         <svg
@@ -63,7 +63,7 @@ export default function SettingsPage() {
       {/* Profile link */}
       <Link
         href="/profile"
-        className="mb-6 flex items-center gap-3 rounded-xl border border-zinc-100 bg-white p-4 transition-colors hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-900 dark:hover:bg-zinc-800"
+        className="mb-6 flex items-center gap-3 rounded-xl border border-zinc-100 bg-white p-4 transition-all duration-150 hover:bg-zinc-50 active:scale-[0.98] dark:border-zinc-800 dark:bg-zinc-900 dark:hover:bg-zinc-800"
       >
         {profile ? (
           <AvatarUpload userId={profile.id} currentAvatarUrl={profile.avatar_url} size="md" />
@@ -103,7 +103,7 @@ export default function SettingsPage() {
             <button
               key={option.value}
               onClick={() => setTheme(option.value)}
-              className={`flex-1 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+              className={`flex-1 rounded-lg px-3 py-2 text-sm font-medium transition-all duration-150 active:scale-[0.95] ${
                 theme === option.value
                   ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
                   : "text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200"
@@ -123,7 +123,7 @@ export default function SettingsPage() {
         <button
           onClick={handleSignOut}
           disabled={isPending}
-          className="w-full rounded-xl border border-red-200 bg-white px-4 py-3 text-sm font-medium text-red-600 transition-colors hover:bg-red-50 disabled:opacity-50 dark:border-red-900 dark:bg-zinc-900 dark:text-red-400 dark:hover:bg-red-950"
+          className="w-full rounded-xl border border-red-200 bg-white px-4 py-3 text-sm font-medium text-red-600 transition-all duration-150 hover:bg-red-50 active:scale-[0.97] disabled:opacity-50 dark:border-red-900 dark:bg-zinc-900 dark:text-red-400 dark:hover:bg-red-950"
         >
           {isPending ? "Signing out..." : "Sign out"}
         </button>

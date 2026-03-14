@@ -3,42 +3,45 @@
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useTransition } from "react";
 
-type TabValue = "trending" | "new" | "ending";
+type SortValue = "top" | "newest" | "comments" | "ending";
 
-const tabs: { label: string; value: TabValue }[] = [
-  { label: "Trending", value: "trending" },
-  { label: "New", value: "new" },
+const sortTabs: { label: string; value: SortValue }[] = [
+  { label: "Top", value: "top" },
+  { label: "Newest", value: "newest" },
+  { label: "Most Comments", value: "comments" },
   { label: "Ending Soon", value: "ending" },
 ];
 
-function FeedTabsInner() {
+function ProfileSortTabsInner({ handle }: { handle: string }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [isPending, startTransition] = useTransition();
-  const activeTab = (searchParams.get("tab") as TabValue) || "trending";
 
-  function handleTabChange(value: TabValue) {
-    const params = new URLSearchParams(searchParams.toString());
-    if (value === "trending") {
-      params.delete("tab");
-    } else {
-      params.set("tab", value);
-    }
-    const qs = params.toString();
+  const sort = searchParams.get("sort");
+  const activeSort: SortValue =
+    sort === "top" || sort === "newest" || sort === "comments" || sort === "ending"
+      ? sort
+      : "newest";
+
+  function handleSortChange(value: SortValue) {
+    const href =
+      value === "newest"
+        ? `/profile/${handle}`
+        : `/profile/${handle}?sort=${value}`;
     startTransition(() => {
-      router.replace(qs ? `?${qs}` : "/");
+      router.replace(href);
     });
   }
 
   return (
-    <div className="sticky top-0 z-40 border-b border-zinc-200 bg-white/80 backdrop-blur-lg dark:border-zinc-800 dark:bg-zinc-950/80">
-      <div className={`mx-auto flex max-w-lg gap-1 px-4 transition-opacity ${isPending ? "opacity-60 pointer-events-none" : ""}`}>
-        {tabs.map((tab) => {
-          const isActive = activeTab === tab.value;
+    <div className="border-b border-zinc-200 dark:border-zinc-800">
+      <div className={`flex gap-1 px-4 ${isPending ? "opacity-60 pointer-events-none" : ""}`}>
+        {sortTabs.map((tab) => {
+          const isActive = activeSort === tab.value;
           return (
             <button
               key={tab.value}
-              onClick={() => handleTabChange(tab.value)}
+              onClick={() => handleSortChange(tab.value)}
               className={`relative px-4 py-3 text-sm transition-colors active:opacity-70 ${
                 isActive
                   ? "font-semibold text-zinc-900 dark:text-zinc-100"
@@ -57,17 +60,17 @@ function FeedTabsInner() {
   );
 }
 
-export default function FeedTabs() {
+export default function ProfileSortTabs({ handle }: { handle: string }) {
   return (
     <Suspense
       fallback={
-        <div className="sticky top-0 z-40 border-b border-zinc-200 bg-white/80 backdrop-blur-lg dark:border-zinc-800 dark:bg-zinc-950/80">
-          <div className="mx-auto flex max-w-lg gap-1 px-4">
-            {tabs.map((tab) => (
+        <div className="border-b border-zinc-200 dark:border-zinc-800">
+          <div className="flex gap-1 px-4">
+            {sortTabs.map((tab) => (
               <span
                 key={tab.value}
                 className={`px-4 py-3 text-sm ${
-                  tab.value === "trending"
+                  tab.value === "newest"
                     ? "font-semibold text-zinc-900 dark:text-zinc-100"
                     : "text-zinc-400 dark:text-zinc-500"
                 }`}
@@ -79,7 +82,7 @@ export default function FeedTabs() {
         </div>
       }
     >
-      <FeedTabsInner />
+      <ProfileSortTabsInner handle={handle} />
     </Suspense>
   );
 }

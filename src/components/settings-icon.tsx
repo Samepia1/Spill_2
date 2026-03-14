@@ -15,7 +15,7 @@ export default function SettingsIcon() {
   return (
     <Link
       href="/settings"
-      className="fixed top-4 right-4 z-50 rounded-full bg-white/80 p-2 text-zinc-500 shadow-sm backdrop-blur-sm transition-colors hover:text-zinc-800 dark:bg-zinc-900/80 dark:text-zinc-400 dark:hover:text-zinc-100"
+      className="fixed top-4 right-4 z-50 rounded-full bg-white/80 p-2 text-zinc-500 shadow-sm backdrop-blur-sm transition-all duration-150 hover:text-zinc-800 active:scale-[0.90] dark:bg-zinc-900/80 dark:text-zinc-400 dark:hover:text-zinc-100"
       aria-label="Settings"
     >
       <svg

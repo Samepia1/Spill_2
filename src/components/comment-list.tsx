@@ -74,7 +74,7 @@ export default function CommentList({ comments }: { comments: SafeComment[] }) {
             {!comment.isCurrentUser && comment.status === "active" && (
               <button
                 onClick={() => setReportingCommentId(comment.id)}
-                className="ml-auto text-zinc-400 transition-colors hover:text-orange-500 dark:text-zinc-500 dark:hover:text-orange-400"
+                className="ml-auto text-zinc-400 transition-colors hover:text-orange-500 dark:text-zinc-500 dark:hover:text-orange-400 active:opacity-60"
               >
                 <FlagIcon />
               </button>
