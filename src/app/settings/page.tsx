@@ -1,6 +1,7 @@
 "use client";
 
 import { useTransition } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useTheme } from "@/components/theme-provider";
 import { signOut } from "./actions";
@@ -12,6 +13,7 @@ const themeOptions = [
 ];
 
 export default function SettingsPage() {
+  const router = useRouter();
   const { theme, setTheme } = useTheme();
   const [isPending, startTransition] = useTransition();
 
@@ -23,6 +25,26 @@ export default function SettingsPage() {
 
   return (
     <div className="mx-auto max-w-lg px-4 pt-6">
+      <button
+        onClick={() => router.back()}
+        className="fixed top-4 right-4 z-50 rounded-full bg-white/80 p-2 text-zinc-500 shadow-sm backdrop-blur-sm transition-colors hover:text-zinc-800 dark:bg-zinc-900/80 dark:text-zinc-400 dark:hover:text-zinc-100"
+        aria-label="Close settings"
+      >
+        <svg
+          width="20"
+          height="20"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth={1.5}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <line x1="18" y1="6" x2="6" y2="18" />
+          <line x1="6" y1="6" x2="18" y2="18" />
+        </svg>
+      </button>
+
       <h1 className="mb-6 text-2xl font-bold text-zinc-900 dark:text-zinc-50">
         Settings
       </h1>

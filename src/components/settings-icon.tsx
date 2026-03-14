@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-const hideOnRoutes = ["/login", "/verify", "/onboarding"];
+const hideOnRoutes = ["/login", "/verify", "/onboarding", "/settings"];
 
 export default function SettingsIcon() {
   const pathname = usePathname();

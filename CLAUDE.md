@@ -15,9 +15,9 @@ Anonymous college confessions platform. Students sign in with their .edu email, 
 ```
 src/
 ├── app/
-│   ├── layout.tsx              # Root layout — uses BottomNavWrapper (server component)
+│   ├── layout.tsx              # Root layout — ThemeProvider, SettingsIcon, BottomNavWrapper
 │   ├── page.tsx                # Feed page (trending/new/ending tabs, PostCard list)
-│   ├── globals.css             # Tailwind import + CSS vars
+│   ├── globals.css             # Tailwind import + CSS vars + class-based dark mode (@custom-variant)
 │   ├── actions.ts              # Server actions: toggleLike
 │   ├── report-actions.ts       # Server action: createReport (post/comment/user)
 │   ├── (auth)/                 # Auth route group (centered layout, no nav)
@@ -36,6 +36,9 @@ src/
 │   ├── post/[id]/
 │   │   ├── page.tsx            # Thread view (post + comments, identity choice, anon numbering)
 │   │   └── actions.ts          # Server action: createComment (with isAnonymous + identity lock)
+│   ├── settings/
+│   │   ├── page.tsx            # Settings page (theme toggle, sign out, profile link, X close button)
+│   │   └── actions.ts          # Server action: signOut
 │   └── mod/
 │       ├── page.tsx            # Moderation queue (Open/Reviewed/Dismissed tabs)
 │       ├── actions.ts          # Server actions: removePost, removeComment, suspendUser, dismissReport
@@ -47,7 +50,9 @@ src/
 │   ├── comment-list.tsx        # Comment list (Anon N or @handle, OP badge, report flags)
 │   ├── feed-tabs.tsx           # Trending/New/Ending tab selector
 │   ├── post-card.tsx           # Post card: "Anonymous → @target" or "@author → @target" + like/comment/report
-│   └── report-modal.tsx        # Reusable report modal (reason dropdown, details textarea)
+│   ├── report-modal.tsx        # Reusable report modal (reason dropdown, details textarea)
+│   ├── settings-icon.tsx       # Persistent gear icon (fixed top-right, hidden on auth + settings routes)
+│   └── theme-provider.tsx      # ThemeProvider context + useTheme hook (light/dark/system, localStorage)
 ├── lib/
 │   ├── time.ts                 # formatRelativeTime, timeRemaining (nullable) helpers
 │   ├── current-user.ts         # getCurrentUser() — fetches auth user + public profile
@@ -130,6 +135,14 @@ supabase/
 8. **Optional expiration**: author-chosen auto-delete timer, permanent posts by default
 9. **Identity reveal**: anonymous/revealed for both posts and comments, per-thread locked comment identity
 10. **Deployment**: Vercel (auto-deploy from GitHub), Supabase hosted DB
+11. **Settings page**: theme toggle (light/dark/system) with localStorage persistence, sign-out button, profile link, gear icon on all pages, X close button to go back
+
+## Theme System
+- **Class-based dark mode**: Tailwind v4 `@custom-variant dark` in `globals.css` — activates `dark:` utilities via `.dark` class on `<html>`
+- **ThemeProvider** (`src/components/theme-provider.tsx`): React context storing user choice (`light`/`dark`/`system`) in localStorage
+- **FOUC prevention**: inline `<script>` in `layout.tsx` `<head>` reads localStorage and sets `.dark` class before paint
+- **Settings access**: gear icon (`src/components/settings-icon.tsx`) fixed top-right on all pages, hidden on auth routes and `/settings`
+- **Settings page** (`/settings`): theme toggle (3 buttons), sign-out, profile link, fixed X close button (same position as gear icon) that navigates back via `router.back()`
 
 ## What's Next
 The spec document is at `Spill_Project_Description.txt`. Remaining features may include: notifications, user profile editing, admin panel, and further polish.
