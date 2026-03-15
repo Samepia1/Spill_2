@@ -171,6 +171,24 @@ export default function OnboardingPage() {
           className="mb-4 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 placeholder-zinc-400 focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-50 dark:placeholder-zinc-500"
         />
 
+        <label
+          htmlFor="phone_number"
+          className="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300"
+        >
+          Phone number{" "}
+          <span className="text-zinc-400 dark:text-zinc-500">(optional)</span>
+        </label>
+        <input
+          id="phone_number"
+          name="phone_number"
+          type="tel"
+          placeholder="(555) 123-4567"
+          className="mb-4 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 placeholder-zinc-400 focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-50 dark:placeholder-zinc-500"
+        />
+        <p className="mb-4 -mt-3 text-xs text-zinc-400 dark:text-zinc-500">
+          Add your phone so posts about you can be linked to your profile
+        </p>
+
         {error && (
           <p className="mb-4 text-sm text-red-600 dark:text-red-400">
             {error}

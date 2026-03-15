@@ -13,6 +13,7 @@ export type PostCardProps = {
   body: string;
   targetHandle: string;
   targetDisplayName: string | null;
+  targetIsPlaceholder?: boolean;
   isAnonymous: boolean;
   authorHandle: string | null;
   authorDisplayName: string | null;
@@ -31,6 +32,7 @@ export default function PostCard({
   body,
   targetHandle,
   targetDisplayName,
+  targetIsPlaceholder,
   isAnonymous,
   authorHandle,
   authorDisplayName,
@@ -82,13 +84,16 @@ export default function PostCard({
             </Link>
           )}
           <span className="text-zinc-300 dark:text-zinc-600">→</span>
-          <Avatar src={targetAvatarUrl} alt={`@${targetHandle}`} size="xs" />
+          <Avatar src={targetIsPlaceholder ? null : targetAvatarUrl} alt={`@${targetHandle}`} size="xs" />
           <Link
             href={`/profile/${targetHandle}`}
             className="text-zinc-500 transition-colors hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200 active:opacity-70"
           >
             @{targetHandle}
           </Link>
+          {targetIsPlaceholder && (
+            <span className="text-xs text-zinc-400 dark:text-zinc-500">(not on Spill)</span>
+          )}
         </div>
 
         {remaining && (

@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
-import { searchTargetUsers, createPost, getCurrentUserHandle } from "./actions";
+import { searchTargetUsers, createPost, getCurrentUserHandle, checkPhoneNumber } from "./actions";
 import Avatar from "@/components/avatar";
 
 function CreatePostForm() {
@@ -25,6 +25,18 @@ function CreatePostForm() {
   const [expiresInHours, setExpiresInHours] = useState(24);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  // Phone number fallback state
+  const [showPhoneInput, setShowPhoneInput] = useState(false);
+  const [phoneNumber, setPhoneNumber] = useState("");
+  const [phoneChecking, setPhoneChecking] = useState(false);
+  const [phoneResult, setPhoneResult] = useState<{
+    type: "existing" | "placeholder" | "available";
+    handle?: string;
+    placeholderId?: string;
+  } | null>(null);
+  const [targetPhoneNumber, setTargetPhoneNumber] = useState<string | null>(null);
+  const [targetIsPlaceholder, setTargetIsPlaceholder] = useState(false);
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -66,6 +78,67 @@ function CreatePostForm() {
     };
   }, [targetQuery]);
 
+  // Auto-check phone number when 10+ digits entered
+  useEffect(() => {
+    const digits = phoneNumber.replace(/\D/g, "");
+    if (digits.length < 10) {
+      setPhoneResult(null);
+      return;
+    }
+
+    setPhoneChecking(true);
+    checkPhoneNumber(phoneNumber).then((result) => {
+      setPhoneChecking(false);
+      if ("error" in result) {
+        setPhoneResult(null);
+        return;
+      }
+      if ("existingUser" in result) {
+        setPhoneResult({ type: "existing", handle: result.existingUser.handle });
+      } else if ("existingPlaceholder" in result) {
+        // Auto-select the existing placeholder
+        setPhoneResult({ type: "placeholder", handle: result.existingPlaceholder.handle, placeholderId: result.existingPlaceholder.id });
+        setTargetHandle(result.existingPlaceholder.handle);
+        setTargetPhoneNumber(phoneNumber);
+        setTargetIsPlaceholder(true);
+        setIsAnonymous(false);
+        setShowPhoneInput(false);
+        setPhoneNumber("");
+      } else {
+        setPhoneResult({ type: "available" });
+      }
+    });
+  }, [phoneNumber]);
+
+  function handlePhoneInputStart() {
+    setShowPhoneInput(true);
+    setTargetQuery("");
+    setTargetResults([]);
+    setShowTargetPicker(false);
+    setPhoneResult(null);
+    setPhoneNumber("");
+  }
+
+  function handleBackToSearch() {
+    setShowPhoneInput(false);
+    setPhoneNumber("");
+    setPhoneResult(null);
+    setPhoneChecking(false);
+  }
+
+  function selectPhoneTarget() {
+    const digits = phoneNumber.replace(/\D/g, "");
+    const lastFour = digits.slice(-4);
+    const placeholderHandle = `phone_${lastFour}`;
+    setTargetHandle(placeholderHandle);
+    setTargetPhoneNumber(phoneNumber);
+    setTargetIsPlaceholder(true);
+    setIsAnonymous(false);
+    setShowPhoneInput(false);
+    setPhoneNumber("");
+    setPhoneResult(null);
+  }
+
   function selectTarget(user: {
     id: string;
     handle: string;
@@ -85,6 +158,11 @@ function CreatePostForm() {
     setTargetQuery("");
     setTargetResults([]);
     setShowTargetPicker(true);
+    setTargetPhoneNumber(null);
+    setTargetIsPlaceholder(false);
+    setShowPhoneInput(false);
+    setPhoneNumber("");
+    setPhoneResult(null);
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -93,7 +171,11 @@ function CreatePostForm() {
     setLoading(true);
 
     const formData = new FormData();
-    formData.set("targetHandle", targetHandle);
+    if (targetPhoneNumber) {
+      formData.set("targetPhoneNumber", targetPhoneNumber);
+    } else {
+      formData.set("targetHandle", targetHandle);
+    }
     formData.set("subject", subject);
     formData.set("body", body);
     formData.set("isAnonymous", String(isAnonymous));
@@ -140,11 +222,15 @@ function CreatePostForm() {
             <div className="flex items-center gap-2">
               <span className="inline-flex items-center gap-1 rounded-full bg-zinc-100 px-3 py-1 text-sm text-zinc-900 dark:bg-zinc-800 dark:text-zinc-100">
                 @{targetHandle}
-                {targetDisplayName && (
+                {targetIsPlaceholder ? (
+                  <span className="text-xs text-zinc-500 dark:text-zinc-400">
+                    (not on Spill)
+                  </span>
+                ) : targetDisplayName ? (
                   <span className="text-zinc-500 dark:text-zinc-400">
                     ({targetDisplayName})
                   </span>
-                )}
+                ) : null}
                 <button
                   type="button"
                   onClick={clearTarget}
@@ -154,6 +240,70 @@ function CreatePostForm() {
                   &times;
                 </button>
               </span>
+            </div>
+          ) : showPhoneInput ? (
+            <div className="space-y-3">
+              <div className="relative">
+                <input
+                  type="tel"
+                  placeholder="(555) 123-4567"
+                  value={phoneNumber}
+                  onChange={(e) => setPhoneNumber(e.target.value)}
+                  className="w-full rounded-lg border border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-900 placeholder-zinc-400 focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-500 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-50 dark:placeholder-zinc-500"
+                />
+                {phoneChecking && (
+                  <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                    <div className="h-4 w-4 animate-spin rounded-full border-2 border-zinc-300 border-t-zinc-600 dark:border-zinc-600 dark:border-t-zinc-300" />
+                  </div>
+                )}
+              </div>
+
+              {phoneResult?.type === "existing" && (
+                <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-3 dark:border-zinc-700 dark:bg-zinc-800">
+                  <p className="text-sm text-zinc-700 dark:text-zinc-300">
+                    This person is already on Spill as{" "}
+                    <span className="font-medium text-zinc-900 dark:text-zinc-100">
+                      @{phoneResult.handle}
+                    </span>
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTargetHandle(phoneResult.handle!);
+                      setTargetDisplayName(null);
+                      setShowPhoneInput(false);
+                      setPhoneNumber("");
+                      setPhoneResult(null);
+                    }}
+                    className="mt-2 text-sm font-medium text-zinc-900 underline hover:no-underline dark:text-zinc-100"
+                  >
+                    Select @{phoneResult.handle}
+                  </button>
+                </div>
+              )}
+
+              {phoneResult?.type === "available" && (
+                <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-3 dark:border-zinc-700 dark:bg-zinc-800">
+                  <p className="mb-2 text-sm text-zinc-700 dark:text-zinc-300">
+                    This person isn&apos;t on Spill yet. Post about them anyway?
+                  </p>
+                  <button
+                    type="button"
+                    onClick={selectPhoneTarget}
+                    className="rounded-md bg-zinc-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-zinc-800 active:scale-[0.97] dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200"
+                  >
+                    Post about phone_{phoneNumber.replace(/\D/g, "").slice(-4)}
+                  </button>
+                </div>
+              )}
+
+              <button
+                type="button"
+                onClick={handleBackToSearch}
+                className="text-sm text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200"
+              >
+                &larr; Back to search
+              </button>
             </div>
           ) : (
             <div className="relative">
@@ -191,6 +341,21 @@ function CreatePostForm() {
                     </li>
                   ))}
                 </ul>
+              )}
+
+              {showTargetPicker && targetResults.length === 0 && targetQuery.length >= 2 && (
+                <div className="mt-2 text-center">
+                  <p className="text-sm text-zinc-500 dark:text-zinc-400">
+                    Can&apos;t find who you&apos;re looking for?
+                  </p>
+                  <button
+                    type="button"
+                    onClick={handlePhoneInputStart}
+                    className="mt-1.5 text-sm font-medium text-zinc-900 underline hover:no-underline dark:text-zinc-100"
+                  >
+                    Post about someone not on Spill
+                  </button>
+                </div>
               )}
             </div>
           )}

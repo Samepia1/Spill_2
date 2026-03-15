@@ -4,9 +4,10 @@ import { useState, useEffect, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useTheme } from "@/components/theme-provider";
-import { signOut, getCurrentUserProfile } from "./actions";
+import { signOut, getCurrentUserProfile, updatePhoneNumber } from "./actions";
 import Avatar from "@/components/avatar";
 import AvatarUpload from "@/components/avatar-upload";
+import { formatPhoneDisplay } from "@/lib/phone";
 
 const themeOptions = [
   { value: "light" as const, label: "Light" },
@@ -22,10 +23,19 @@ export default function SettingsPage() {
     id: string;
     handle: string;
     avatar_url: string | null;
+    phone_number: string | null;
   } | null>(null);
+  const [phoneNumber, setPhoneNumber] = useState("");
+  const [phoneSaving, setPhoneSaving] = useState(false);
+  const [phoneMessage, setPhoneMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
   useEffect(() => {
-    getCurrentUserProfile().then(setProfile);
+    getCurrentUserProfile().then((p) => {
+      setProfile(p);
+      if (p?.phone_number) {
+        setPhoneNumber(formatPhoneDisplay(p.phone_number));
+      }
+    });
   }, []);
 
   function handleSignOut() {
@@ -92,6 +102,69 @@ export default function SettingsPage() {
           <polyline points="9 18 15 12 9 6" />
         </svg>
       </Link>
+
+      {/* Phone Number */}
+      <section className="mb-6">
+        <h2 className="mb-3 text-sm font-medium text-zinc-500 dark:text-zinc-400">
+          Phone Number
+        </h2>
+        <div className="rounded-xl border border-zinc-100 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
+          <p className="mb-3 text-xs text-zinc-400 dark:text-zinc-500">
+            Add your phone so posts about you can be linked to your profile
+          </p>
+          <div className="flex gap-2">
+            <input
+              type="tel"
+              placeholder="(555) 123-4567"
+              value={phoneNumber}
+              onChange={(e) => {
+                setPhoneNumber(e.target.value);
+                setPhoneMessage(null);
+              }}
+              className="flex-1 rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 placeholder-zinc-400 focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-50 dark:placeholder-zinc-500"
+            />
+            <button
+              onClick={async () => {
+                if (!phoneNumber.trim()) {
+                  setPhoneMessage({ type: "error", text: "Please enter a phone number" });
+                  return;
+                }
+                setPhoneSaving(true);
+                setPhoneMessage(null);
+                const result = await updatePhoneNumber(phoneNumber);
+                setPhoneSaving(false);
+                if (result.error) {
+                  setPhoneMessage({ type: "error", text: result.error });
+                } else {
+                  const mergedCount = result.mergedCount ?? 0;
+                  setPhoneMessage({
+                    type: "success",
+                    text:
+                      mergedCount > 0
+                        ? `Phone number saved. ${mergedCount} post(s) have been linked to your profile!`
+                        : "Phone number saved.",
+                  });
+                }
+              }}
+              disabled={phoneSaving}
+              className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-zinc-800 disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200"
+            >
+              {phoneSaving ? "Saving..." : "Save"}
+            </button>
+          </div>
+          {phoneMessage && (
+            <p
+              className={`mt-2 text-sm ${
+                phoneMessage.type === "success"
+                  ? "text-green-600 dark:text-green-400"
+                  : "text-red-600 dark:text-red-400"
+              }`}
+            >
+              {phoneMessage.text}
+            </p>
+          )}
+        </div>
+      </section>
 
       {/* Appearance */}
       <section className="mb-6">

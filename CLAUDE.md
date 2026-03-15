@@ -28,7 +28,7 @@ src/
 │   │   └── onboarding/page.tsx # Handle + display name → create public.users row
 │   ├── create/
 │   │   ├── page.tsx            # Post creation form (target picker, subject, body, anonymous toggle, expiration toggle)
-│   │   └── actions.ts          # Server actions: createPost, getCurrentUserHandle, searchTargetUsers
+│   │   └── actions.ts          # Server actions: createPost, getCurrentUserHandle, searchTargetUsers, checkPhoneNumber
 │   ├── search/
 │   │   ├── page.tsx            # Search users page (activity-ranked, infinite scroll)
 │   │   └── actions.ts          # Server action: searchUsersRanked (RPC, paginated)
@@ -40,7 +40,7 @@ src/
 │   │   └── actions.ts          # Server action: createComment (with isAnonymous + identity lock)
 │   ├── settings/
 │   │   ├── page.tsx            # Settings page (theme toggle, sign out, profile link, X close button)
-│   │   └── actions.ts          # Server actions: signOut, updateAvatarUrl, getCurrentUserProfile
+│   │   └── actions.ts          # Server actions: signOut, updateAvatarUrl, getCurrentUserProfile, updatePhoneNumber
 │   └── mod/
 │       ├── page.tsx            # Moderation queue (Open/Reviewed/Dismissed tabs)
 │       ├── actions.ts          # Server actions: removePost, removeComment, suspendUser, dismissReport
@@ -52,13 +52,15 @@ src/
 │   ├── avatar.tsx              # Reusable Avatar component (xs/sm/md/lg, anonymous silhouette, image, placeholder)
 │   ├── avatar-upload.tsx       # Avatar upload component (file picker, Supabase Storage upload, server action save)
 │   ├── comment-list.tsx        # Comment list (Anon N or @handle, OP badge, report flags, avatars)
-│   ├── feed-tabs.tsx           # Trending/New/Ending tab selector
+│   ├── feed-tabs.tsx           # Trending/New/Ending tab selector (useTransition for pending state)
+│   ├── profile-sort-tabs.tsx   # Profile sort tabs (Top/Newest/Comments/Ending, useTransition)
 │   ├── post-card.tsx           # Post card: "[avatar] Anonymous → [avatar] @target" + like/comment/report
 │   ├── report-modal.tsx        # Reusable report modal (reason dropdown, details textarea)
 │   ├── settings-icon.tsx       # Persistent gear icon (fixed top-right, hidden on auth + settings routes)
 │   └── theme-provider.tsx      # ThemeProvider context + useTheme hook (light/dark/system, localStorage)
 ├── lib/
 │   ├── time.ts                 # formatRelativeTime, timeRemaining (nullable) helpers
+│   ├── phone.ts                # normalizePhone, formatPhoneDisplay, lastFour helpers
 │   ├── current-user.ts         # getCurrentUser() — fetches auth user + public profile
 │   └── supabase/
 │       ├── client.ts           # Browser Supabase client (createBrowserClient)
@@ -80,7 +82,12 @@ supabase/
     ├── 010_search_by_name.sql              # Update RPC to search by handle OR display_name
     ├── 011_avatar_url.sql                  # Add avatar_url column to users table
     ├── 012_avatar_storage.sql              # Create avatars storage bucket + RLS policies
-    └── 013_search_rpc_avatar.sql           # Update search RPC to return avatar_url
+    ├── 013_search_rpc_avatar.sql           # Update search RPC to return avatar_url
+    ├── 014_placeholder_profiles.sql        # Placeholder profiles table, RLS, generate_handle + claim RPCs
+    ├── 015_posts_placeholder_target.sql    # Add target_placeholder_id to posts, XOR constraint
+    ├── 016_users_phone_number.sql          # Add phone_number to users table
+    ├── 017_placeholder_counters.sql        # Triggers for placeholder post_count and unique_poster_count
+    └── 018_search_rpc_placeholder.sql      # Update search RPC to include placeholder profiles
 ```
 
 ## Auth Flow (fully working)
@@ -101,8 +108,9 @@ supabase/
 
 ## Database Schema (key tables)
 - **universities**: id, name, email_domain (seeded with umn.edu, test.edu)
-- **users**: id (refs auth.users), university_id, email, handle, display_name, avatar_url (nullable), role (`user`/`moderator`/`admin`), status (`active`/`suspended`/`deleted`)
-- **posts**: id, university_id, author_user_id, target_user_id, subject (1-200 chars), body (1-1000 chars), is_anonymous (bool, default true), expires_at (nullable timestamptz), like_count, comment_count, status (`active`/`expired`/`removed`), removed_at, removed_by, removal_reason
+- **users**: id (refs auth.users), university_id, email, handle, display_name, avatar_url (nullable), phone_number (nullable), role (`user`/`moderator`/`admin`), status (`active`/`suspended`/`deleted`)
+- **placeholder_profiles**: id, phone_number (E.164), phone_last_four, handle (generated `phone_XXXX`), university_id, created_by, claimed_by (nullable), claimed_at, post_count, unique_poster_count. UNIQUE(phone_number, university_id). RLS university-scoped.
+- **posts**: id, university_id, author_user_id, target_user_id (nullable), target_placeholder_id (nullable, FK to placeholder_profiles), subject (1-200 chars), body (1-1000 chars), is_anonymous (bool, default true), expires_at (nullable timestamptz), like_count, comment_count, status (`active`/`expired`/`removed`), removed_at, removed_by, removal_reason. XOR constraint: exactly one of target_user_id or target_placeholder_id must be set.
 - **comments**: id, post_id, university_id, author_user_id, body (1-300 chars), is_anonymous (bool, default true), parent_comment_id, status (`active`/`removed`), removed_at, removed_by, removal_reason
 - **likes**: post_id + user_id (unique)
 - **reports**: reporter_user_id, entity_type (`post`/`comment`/`user`), entity_id, reason, details, status (`open`/`reviewed`/`dismissed`)
@@ -147,6 +155,10 @@ supabase/
 11. **Settings page**: theme toggle (light/dark/system) with localStorage persistence, sign-out button, profile link, gear icon on all pages, X close button to go back
 12. **Activity-ranked search**: users ranked by posts about them + comments on those posts, Supabase RPC with pagination, IntersectionObserver infinite scroll
 13. **Avatars**: user-uploaded profile pictures via Supabase Storage. Displayed in post cards, comments, search results, target picker, profile pages, and settings. Anonymous posts/comments always show a generic silhouette. Upload available during onboarding, from settings, and from own profile page.
+14. **Placeholder profiles**: Phone-number-based shadow profiles for people not yet on the platform. Users can post about someone by entering their phone number when no search results match. System creates a `phone_XXXX` placeholder profile. Posts accumulate under the same placeholder. When the real person signs up and adds their phone number (in settings or onboarding), all posts auto-transfer to their real profile via `claim_placeholder_profile` RPC. Non-anonymous posting is the default for placeholder targets. Search results include unclaimed placeholders with "(not on Spill)" badge.
+15. **Button press feedback**: All interactive elements have `active:` Tailwind states (scale/opacity) for tap/click feedback. Global `-webkit-tap-highlight-color: transparent` suppresses browser defaults.
+16. **Loading skeletons**: `loading.tsx` files for feed, profile, thread, and mod pages show skeleton UI during navigation.
+17. **Fast tab switching**: Feed tabs and profile sort tabs use `useTransition` for instant pending state during server re-renders.
 
 ## Theme System
 - **Class-based dark mode**: Tailwind v4 `@custom-variant dark` in `globals.css` — activates `dark:` utilities via `.dark` class on `<html>`
@@ -162,6 +174,18 @@ supabase/
 - **Pagination**: `LIMIT`/`OFFSET` in the RPC, 20 results per page
 - **Infinite scroll**: `IntersectionObserver` on sentinel div, auto-fetches next page when scrolled near bottom
 - **Future optimization**: consider a materialized `user_activity` table refreshed on a schedule instead of computing on the fly
+
+## Placeholder Profile System
+- **Separate table**: `placeholder_profiles` is independent from `users` (no auth.users FK). Posts reference either `target_user_id` (real user) or `target_placeholder_id` (placeholder), never both (XOR constraint).
+- **Handle generation**: `generate_placeholder_handle(phone_last_four, university_id)` SQL function generates `phone_XXXX`, deduplicating against both tables.
+- **University-scoped**: Placeholders inherit the poster's university. Same phone at different universities = separate placeholders.
+- **Create flow**: When target search returns 0 results, UI offers "Post about someone not on Spill" → phone number input → `checkPhoneNumber` action validates → finds/creates placeholder → post targets the placeholder.
+- **Claiming**: `claim_placeholder_profile(phone_number, user_id, university_id)` SECURITY DEFINER RPC reassigns all posts and marks placeholder as claimed. Called automatically when a user adds their phone number.
+- **Phone storage**: E.164 format (`+15551234567`). Normalized via `src/lib/phone.ts`. Stored on both `users.phone_number` and `placeholder_profiles.phone_number`.
+- **Counter triggers**: `post_count` and `unique_poster_count` on placeholders maintained by AFTER INSERT trigger on posts (migration 017). Future SMS notification uses `unique_poster_count > 1` threshold.
+- **Search integration**: RPC returns `is_placeholder` boolean. Unclaimed placeholders appear in search results with "(not on Spill)" badge.
+- **Profile fallback**: `/profile/[handle]` page first looks up `users`, then falls back to `placeholder_profiles` for unclaimed placeholders.
+- **Phone number never exposed publicly**: Only last 4 digits appear in the generated handle. `phone_number` column never selected in client-facing queries.
 
 ## What's Next
 The spec document is at `Spill_Project_Description.txt`. Remaining features may include: notifications, user profile editing, admin panel, and further polish.
@@ -189,3 +213,6 @@ npm run lint   # ESLint
 - **Avatar privacy**: anonymous posts/comments must never expose the real avatar. Two layers: (1) `Avatar` component ignores `src` when `isAnonymous=true`, (2) SafeComment sets `avatarUrl: null` when `is_anonymous=true` server-side
 - **Avatar uploads**: client-side upload to Supabase Storage at `{userId}/avatar.{ext}`, then server action saves public URL to `users.avatar_url`. Cache-busting `?t=timestamp` appended after upload.
 - **Supabase Storage bucket**: `avatars` (public, 2MB limit, JPEG/PNG/WebP only). RLS: users can upload/update/delete their own folder, public read.
+- **Dual-target posts**: Post queries must join on both `target:users!posts_target_user_id_fkey(...)` and `target_placeholder:placeholder_profiles!posts_target_placeholder_id_fkey(handle)`. Use `target?.handle ?? targetPlaceholder?.handle ?? "unknown"` to resolve the display handle.
+- **Phone normalization**: Always use `normalizePhone()` from `src/lib/phone.ts` before storing or comparing phone numbers. All phones stored in E.164 format.
+- **Placeholder XOR constraint**: When inserting posts, explicitly set the unused target to `null` (e.g., `target_user_id: null` for placeholder posts). The CHECK constraint requires exactly one non-null target.

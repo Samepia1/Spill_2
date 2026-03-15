@@ -2,6 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { normalizePhone } from "@/lib/phone";
 
 export async function loginWithOtp(formData: FormData) {
   const email = formData.get("email") as string;
@@ -97,6 +98,7 @@ export async function completeOnboarding(formData: FormData) {
   const handle = formData.get("handle") as string;
   const displayName = (formData.get("display_name") as string) || null;
   const avatarUrl = (formData.get("avatar_url") as string) || null;
+  const phoneNumber = formData.get("phone_number") as string | null;
 
   if (!handle || !/^[a-zA-Z0-9_]{3,20}$/.test(handle)) {
     return {
@@ -105,18 +107,27 @@ export async function completeOnboarding(formData: FormData) {
     };
   }
 
+  // Validate phone number if provided
+  let normalizedPhone: string | null = null;
+  if (phoneNumber && phoneNumber.trim() !== "") {
+    normalizedPhone = normalizePhone(phoneNumber);
+    if (!normalizedPhone) {
+      return { error: "Invalid phone number format" };
+    }
+  }
+
   const supabase = await createClient();
 
   const {
-    data: { user },
+    data: { user: authUser },
   } = await supabase.auth.getUser();
 
-  if (!user || !user.email) {
+  if (!authUser || !authUser.email) {
     return { error: "You must be logged in." };
   }
 
   // Look up university by email domain
-  const domain = user.email.split("@")[1];
+  const domain = authUser.email.split("@")[1];
   const { data: university } = await supabase
     .from("universities")
     .select("id")
@@ -127,15 +138,18 @@ export async function completeOnboarding(formData: FormData) {
     return { error: "Your university is not supported." };
   }
 
+  const universityId = university.id;
+
   // Insert user profile
   const { error } = await supabase.from("users").insert({
-    id: user.id,
-    university_id: university.id,
-    email: user.email,
+    id: authUser.id,
+    university_id: universityId,
+    email: authUser.email,
     email_verified: true,
     handle,
     display_name: displayName,
     ...(avatarUrl ? { avatar_url: avatarUrl } : {}),
+    ...(normalizedPhone ? { phone_number: normalizedPhone } : {}),
   });
 
   if (error) {
@@ -143,6 +157,15 @@ export async function completeOnboarding(formData: FormData) {
       return { error: "That handle is already taken." };
     }
     return { error: error.message };
+  }
+
+  // Claim any placeholder profiles matching this phone number
+  if (normalizedPhone) {
+    await supabase.rpc("claim_placeholder_profile", {
+      p_phone_number: normalizedPhone,
+      p_user_id: authUser.id,
+      p_university_id: universityId,
+    });
   }
 
   redirect("/");

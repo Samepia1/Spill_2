@@ -10,6 +10,7 @@ export type RankedUser = {
   display_name: string | null;
   avatar_url: string | null;
   activity: number;
+  is_placeholder: boolean;
 };
 
 export async function searchUsersRanked(
@@ -29,12 +30,13 @@ export async function searchUsersRanked(
   }
 
   const results: RankedUser[] = (data ?? []).map(
-    (row: { id: string; handle: string; display_name: string | null; avatar_url: string | null; activity: number }) => ({
+    (row: { id: string; handle: string; display_name: string | null; avatar_url: string | null; activity: number; is_placeholder: boolean }) => ({
       id: row.id,
       handle: row.handle,
       display_name: row.display_name,
       avatar_url: row.avatar_url,
       activity: Number(row.activity),
+      is_placeholder: row.is_placeholder ?? false,
     })
   );
 

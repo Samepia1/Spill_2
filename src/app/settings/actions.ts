@@ -2,6 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { normalizePhone } from "@/lib/phone";
 
 export async function signOut() {
   const supabase = await createClient();
@@ -34,9 +35,52 @@ export async function getCurrentUserProfile() {
 
   const { data } = await supabase
     .from("users")
-    .select("id, handle, avatar_url")
+    .select("id, handle, avatar_url, phone_number")
     .eq("id", user.id)
     .single();
 
   return data;
+}
+
+export async function updatePhoneNumber(
+  phone: string
+): Promise<{ success?: boolean; mergedCount?: number; error?: string }> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) return { error: "Not authenticated" };
+
+  const normalized = normalizePhone(phone);
+  if (!normalized) return { error: "Invalid phone number format" };
+
+  // Get user's university_id
+  const { data: profile } = await supabase
+    .from("users")
+    .select("university_id")
+    .eq("id", user.id)
+    .single();
+
+  if (!profile) return { error: "User profile not found" };
+
+  // Update phone number
+  const { error: updateError } = await supabase
+    .from("users")
+    .update({ phone_number: normalized })
+    .eq("id", user.id);
+
+  if (updateError) return { error: updateError.message };
+
+  // Claim any placeholder profiles matching this phone number
+  const { data: mergedCount } = await supabase.rpc(
+    "claim_placeholder_profile",
+    {
+      p_phone_number: normalized,
+      p_user_id: user.id,
+      p_university_id: profile.university_id,
+    }
+  );
+
+  return { success: true, mergedCount: mergedCount ?? 0 };
 }

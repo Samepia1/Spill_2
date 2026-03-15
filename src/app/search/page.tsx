@@ -95,7 +95,7 @@ export default function SearchPage() {
               className="flex items-center justify-between rounded-lg border border-zinc-200 bg-white px-4 py-3 transition-all duration-150 hover:bg-zinc-50 active:scale-[0.98] dark:border-zinc-800 dark:bg-zinc-900 dark:hover:bg-zinc-800"
             >
               <div className="flex items-center gap-3">
-                <Avatar src={user.avatar_url} alt={`@${user.handle}`} size="sm" />
+                <Avatar src={user.is_placeholder ? null : user.avatar_url} alt={`@${user.handle}`} size="sm" isAnonymous={user.is_placeholder} />
                 <div>
                   <span className="font-semibold text-zinc-900 dark:text-zinc-50">
                     @{user.handle}
@@ -103,6 +103,11 @@ export default function SearchPage() {
                 {user.display_name && (
                   <span className="ml-2 text-sm text-zinc-500 dark:text-zinc-400">
                     {user.display_name}
+                  </span>
+                )}
+                {user.is_placeholder && (
+                  <span className="ml-2 text-xs text-zinc-400 dark:text-zinc-500">
+                    (not on Spill)
                   </span>
                 )}
                 </div>

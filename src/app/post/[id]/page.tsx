@@ -25,7 +25,7 @@ export default async function ThreadPage({
   const { data: post } = await supabase
     .from("posts")
     .select(
-      "id, subject, body, author_user_id, target_user_id, university_id, is_anonymous, expires_at, like_count, comment_count, created_at, status, target:users!posts_target_user_id_fkey(handle, display_name, avatar_url), author:users!posts_author_user_id_fkey(handle, display_name, avatar_url)"
+      "id, subject, body, author_user_id, target_user_id, university_id, is_anonymous, expires_at, like_count, comment_count, created_at, status, target:users!posts_target_user_id_fkey(handle, display_name, avatar_url), author:users!posts_author_user_id_fkey(handle, display_name, avatar_url), target_placeholder:placeholder_profiles!posts_target_placeholder_id_fkey(handle)"
     )
     .eq("id", id)
     .single();
@@ -42,6 +42,9 @@ export default async function ThreadPage({
     display_name: string | null;
     avatar_url: string | null;
   } | null;
+  const targetPlaceholder = post.target_placeholder as unknown as { handle: string } | null;
+  const targetHandle = target?.handle ?? targetPlaceholder?.handle ?? "unknown";
+  const targetIsPlaceholder = !target && !!targetPlaceholder;
 
   const remaining = timeRemaining(post.expires_at);
   const isExpired = remaining === "Expired";
@@ -152,8 +155,9 @@ export default async function ThreadPage({
           id={post.id}
           subject={post.subject}
           body={post.body}
-          targetHandle={target?.handle ?? "unknown"}
+          targetHandle={targetHandle}
           targetDisplayName={target?.display_name ?? null}
+          targetIsPlaceholder={targetIsPlaceholder}
           isAnonymous={post.is_anonymous}
           authorHandle={postAuthor?.handle ?? null}
           authorDisplayName={postAuthor?.display_name ?? null}

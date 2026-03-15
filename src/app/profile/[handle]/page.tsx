@@ -26,9 +26,23 @@ export default async function ProfileHandlePage({
     .eq("handle", handle)
     .single();
 
+  // If no real user found, try placeholder profiles
+  let placeholder: { id: string; handle: string; phone_last_four: string | null; claimed_by: string | null } | null = null;
   if (!profileUser) {
-    notFound();
+    const { data: placeholderData } = await supabase
+      .from("placeholder_profiles")
+      .select("id, handle, phone_last_four, claimed_by")
+      .eq("handle", handle)
+      .is("claimed_by", null)
+      .single();
+
+    if (!placeholderData) notFound();
+    placeholder = placeholderData;
   }
+
+  const isPlaceholderProfile = !profileUser && !!placeholder;
+  const targetId = isPlaceholderProfile ? placeholder!.id : profileUser!.id;
+  const targetColumn = isPlaceholderProfile ? "target_placeholder_id" : "target_user_id";
 
   const { sort } = await searchParams;
   const activeSort: SortValue =
@@ -41,9 +55,9 @@ export default async function ProfileHandlePage({
   let query = supabase
     .from("posts")
     .select(
-      "id, subject, body, is_anonymous, expires_at, like_count, comment_count, created_at, target:users!posts_target_user_id_fkey(handle, display_name, avatar_url), author:users!posts_author_user_id_fkey(handle, display_name, avatar_url)"
+      "id, subject, body, is_anonymous, expires_at, like_count, comment_count, created_at, target:users!posts_target_user_id_fkey(handle, display_name, avatar_url), author:users!posts_author_user_id_fkey(handle, display_name, avatar_url), target_placeholder:placeholder_profiles!posts_target_placeholder_id_fkey(handle)"
     )
-    .eq("target_user_id", profileUser.id)
+    .eq(targetColumn, targetId)
     .eq("status", "active")
     .or(`expires_at.is.null,expires_at.gt.${now}`);
 
@@ -76,42 +90,59 @@ export default async function ProfileHandlePage({
     userLikedPostIds = new Set(likes?.map((l) => l.post_id) ?? []);
   }
 
-  const isOwnProfile = currentUser?.profile.id === profileUser.id;
+  const isOwnProfile = !isPlaceholderProfile && currentUser?.profile.id === profileUser?.id;
+  const displayHandle = isPlaceholderProfile ? placeholder!.handle : profileUser!.handle;
 
   return (
     <div className="mx-auto max-w-lg">
       {/* Profile header */}
       <header className="px-4 pt-6 pb-4">
-        <div className="mb-3">
-          {isOwnProfile ? (
-            <AvatarUpload
-              userId={profileUser.id}
-              currentAvatarUrl={profileUser.avatar_url}
-              size="lg"
-            />
-          ) : (
-            <Avatar
-              src={profileUser.avatar_url}
-              alt={`@${profileUser.handle}`}
-              size="lg"
-            />
-          )}
-        </div>
-        <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-50">
-          @{profileUser.handle}
-        </h1>
-        {profileUser.display_name && (
-          <p className="mt-1 text-zinc-500 dark:text-zinc-400">
-            {profileUser.display_name}
-          </p>
-        )}
-        {!isOwnProfile && (
-          <Link
-            href={`/create?target=${profileUser.handle}`}
-            className="mt-3 inline-block rounded-lg bg-zinc-900 px-4 py-2 text-sm text-white transition-all duration-150 hover:bg-zinc-800 active:scale-[0.97] dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200"
-          >
-            Create a post about @{profileUser.handle}
-          </Link>
+        {isPlaceholderProfile ? (
+          <>
+            <div className="mb-3">
+              <Avatar src={null} alt={displayHandle} size="lg" />
+            </div>
+            <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-50">
+              @{displayHandle}
+            </h1>
+            <p className="mt-2 rounded-lg bg-zinc-100 px-3 py-2 text-sm text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400">
+              This person hasn&apos;t joined Spill yet
+            </p>
+          </>
+        ) : (
+          <>
+            <div className="mb-3">
+              {isOwnProfile ? (
+                <AvatarUpload
+                  userId={profileUser!.id}
+                  currentAvatarUrl={profileUser!.avatar_url}
+                  size="lg"
+                />
+              ) : (
+                <Avatar
+                  src={profileUser!.avatar_url}
+                  alt={`@${profileUser!.handle}`}
+                  size="lg"
+                />
+              )}
+            </div>
+            <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-50">
+              @{profileUser!.handle}
+            </h1>
+            {profileUser!.display_name && (
+              <p className="mt-1 text-zinc-500 dark:text-zinc-400">
+                {profileUser!.display_name}
+              </p>
+            )}
+            {!isOwnProfile && (
+              <Link
+                href={`/create?target=${profileUser!.handle}`}
+                className="mt-3 inline-block rounded-lg bg-zinc-900 px-4 py-2 text-sm text-white transition-all duration-150 hover:bg-zinc-800 active:scale-[0.97] dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200"
+              >
+                Create a post about @{profileUser!.handle}
+              </Link>
+            )}
+          </>
         )}
       </header>
 
@@ -122,7 +153,7 @@ export default async function ProfileHandlePage({
       <div className="flex flex-col gap-3 p-4">
         {(posts ?? []).length === 0 ? (
           <p className="py-12 text-center text-sm text-zinc-400 dark:text-zinc-500">
-            No posts about @{profileUser.handle} yet
+            No posts about @{displayHandle} yet
           </p>
         ) : (
           (posts ?? []).map((post) => {
@@ -136,14 +167,18 @@ export default async function ProfileHandlePage({
               display_name: string | null;
               avatar_url: string | null;
             } | null;
+            const targetPlaceholder = post.target_placeholder as unknown as { handle: string } | null;
+            const targetHandle = target?.handle ?? targetPlaceholder?.handle ?? "unknown";
+            const postTargetIsPlaceholder = !target && !!targetPlaceholder;
             return (
               <PostCard
                 key={post.id}
                 id={post.id}
                 subject={post.subject}
                 body={post.body}
-                targetHandle={target?.handle ?? "unknown"}
+                targetHandle={targetHandle}
                 targetDisplayName={target?.display_name ?? null}
+                targetIsPlaceholder={postTargetIsPlaceholder}
                 isAnonymous={post.is_anonymous}
                 authorHandle={author?.handle ?? null}
                 authorDisplayName={author?.display_name ?? null}
