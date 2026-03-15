@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { completeOnboarding } from "../actions";
 import { createClient } from "@/lib/supabase/client";
 import Avatar from "@/components/avatar";
+import { compressImage } from "@/lib/compress-image";
 
 export default function OnboardingPage() {
   const [error, setError] = useState<string | null>(null);
@@ -24,8 +25,8 @@ export default function OnboardingPage() {
     const file = e.target.files?.[0];
     if (!file || !userId) return;
 
-    if (file.size > 2 * 1024 * 1024) {
-      setError("Image must be under 2MB");
+    if (file.size > 10 * 1024 * 1024) {
+      setError("Image must be under 10MB");
       return;
     }
 
@@ -38,13 +39,13 @@ export default function OnboardingPage() {
     setError(null);
 
     try {
+      const compressed = await compressImage(file);
       const supabase = createClient();
-      const ext = file.name.split(".").pop() || "jpg";
-      const path = `${userId}/avatar.${ext}`;
+      const path = `${userId}/avatar.jpg`;
 
       const { error: uploadError } = await supabase.storage
         .from("avatars")
-        .upload(path, file, { upsert: true });
+        .upload(path, compressed, { upsert: true });
 
       if (uploadError) {
         setError("Upload failed: " + uploadError.message);

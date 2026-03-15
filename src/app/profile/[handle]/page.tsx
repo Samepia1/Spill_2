@@ -5,6 +5,7 @@ import { getCurrentUser } from "@/lib/current-user";
 import PostCard from "@/components/post-card";
 import Avatar from "@/components/avatar";
 import AvatarUpload from "@/components/avatar-upload";
+import AvatarLightbox from "@/components/avatar-lightbox";
 import ProfileSortTabs from "@/components/profile-sort-tabs";
 
 type SortValue = "top" | "newest" | "comments" | "ending";
@@ -119,7 +120,7 @@ export default async function ProfileHandlePage({
                   size="lg"
                 />
               ) : (
-                <Avatar
+                <AvatarLightbox
                   src={profileUser!.avatar_url}
                   alt={`@${profileUser!.handle}`}
                   size="lg"

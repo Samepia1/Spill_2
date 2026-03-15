@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { updateAvatarUrl } from "@/app/settings/actions";
 import Avatar from "@/components/avatar";
+import { compressImage } from "@/lib/compress-image";
 
 type AvatarUploadProps = {
   userId: string;
@@ -24,9 +25,9 @@ export default function AvatarUpload({
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // Validate file size (2MB)
-    if (file.size > 2 * 1024 * 1024) {
-      alert("Image must be under 2MB");
+    // Validate file size (10MB)
+    if (file.size > 10 * 1024 * 1024) {
+      alert("Image must be under 10MB");
       return;
     }
 
@@ -39,13 +40,13 @@ export default function AvatarUpload({
     setUploading(true);
 
     try {
+      const compressed = await compressImage(file);
       const supabase = createClient();
-      const ext = file.name.split(".").pop() || "jpg";
-      const path = `${userId}/avatar.${ext}`;
+      const path = `${userId}/avatar.jpg`;
 
       const { error: uploadError } = await supabase.storage
         .from("avatars")
-        .upload(path, file, { upsert: true });
+        .upload(path, compressed, { upsert: true });
 
       if (uploadError) {
         alert("Upload failed: " + uploadError.message);
