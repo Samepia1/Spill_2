@@ -59,6 +59,35 @@ export async function toggleLike(postId: string) {
     return { error: insertError.message };
   }
 
+  // Notify post author
+  try {
+    const { data: post } = await supabase
+      .from("posts")
+      .select("author_user_id, subject, university_id")
+      .eq("id", postId)
+      .single();
+
+    if (post && post.author_user_id !== user.id) {
+      const { data: liker } = await supabase
+        .from("users")
+        .select("handle")
+        .eq("id", user.id)
+        .single();
+
+      await supabase.from("notifications").insert({
+        university_id: post.university_id,
+        recipient_id: post.author_user_id,
+        actor_id: user.id,
+        type: "new_like",
+        post_id: postId,
+        actor_handle: liker?.handle ?? null,
+        post_subject: post.subject || "(media post)",
+      });
+    }
+  } catch {
+    // Fire-and-forget
+  }
+
   revalidatePath("/");
   revalidatePath(`/post/${postId}`);
   return { liked: true };

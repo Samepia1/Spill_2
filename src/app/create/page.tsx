@@ -1,14 +1,18 @@
 "use client";
 
-import { useState, useEffect, useRef, Suspense } from "react";
+import { useState, useEffect, useRef, useMemo, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
-import { searchTargetUsers, createPost, getCurrentUserHandle, checkPhoneNumber } from "./actions";
+import { searchTargetUsers, createPost, getCurrentUserHandle, getCurrentUserId, checkPhoneNumber } from "./actions";
 import Avatar from "@/components/avatar";
+import MediaPicker from "@/components/media-picker";
+import { useMediaUpload } from "@/hooks/use-media-upload";
 
 function CreatePostForm() {
   const searchParams = useSearchParams();
 
   const [currentUserHandle, setCurrentUserHandle] = useState<string | null>(null);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const tempPostId = useMemo(() => crypto.randomUUID(), []);
   const [targetHandle, setTargetHandle] = useState("");
   const [targetDisplayName, setTargetDisplayName] = useState<string | null>(
     null
@@ -40,10 +44,19 @@ function CreatePostForm() {
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Fetch current user's handle for identity toggle
+  // Fetch current user's handle and ID
   useEffect(() => {
     getCurrentUserHandle().then(setCurrentUserHandle);
+    getCurrentUserId().then(setCurrentUserId);
   }, []);
+
+  const {
+    mediaFiles,
+    addFiles: addMediaFiles,
+    removeFile: removeMediaFile,
+    isUploading,
+    error: mediaError,
+  } = useMediaUpload(currentUserId ?? "", tempPostId);
 
   // Pre-fill target from URL param
   useEffect(() => {
@@ -183,6 +196,27 @@ function CreatePostForm() {
       formData.set("expiresInHours", String(expiresInHours));
     }
 
+    // Attach media metadata
+    const doneMedia = mediaFiles.filter((f) => f.status === "done");
+    if (doneMedia.length > 0) {
+      formData.set(
+        "mediaItems",
+        JSON.stringify(
+          doneMedia.map((f) => ({
+            storagePath: f.storagePath,
+            publicUrl: f.publicUrl,
+            mediaType: f.type,
+            fileSizeBytes: f.fileSizeBytes,
+            mimeType: f.mimeType,
+            thumbnailUrl: f.thumbnailPublicUrl ?? f.thumbnailUrl,
+            displayOrder: f.displayOrder,
+            width: f.width,
+            height: f.height,
+          }))
+        )
+      );
+    }
+
     const result = await createPost(formData);
     if (result?.error) {
       setError(result.error);
@@ -193,11 +227,13 @@ function CreatePostForm() {
 
   const subjectLength = subject.length;
   const bodyLength = body.length;
+  const hasMedia = mediaFiles.some((f) => f.status === "done");
+  const hasText = subject.trim().length > 0 || body.trim().length > 0;
   const canSubmit =
     targetHandle.length > 0 &&
-    subject.trim().length > 0 &&
-    body.trim().length > 0 &&
-    !loading;
+    (hasText || hasMedia) &&
+    !loading &&
+    !isUploading;
 
   return (
     <div className="mx-auto max-w-lg p-4">
@@ -368,7 +404,7 @@ function CreatePostForm() {
               htmlFor="subject"
               className="block text-sm font-medium text-zinc-700 dark:text-zinc-300"
             >
-              Subject
+              Subject{hasMedia ? <span className="ml-1 font-normal text-zinc-400 dark:text-zinc-500">(optional)</span> : null}
             </label>
             <span
               className={`text-xs ${
@@ -398,7 +434,7 @@ function CreatePostForm() {
               htmlFor="body"
               className="block text-sm font-medium text-zinc-700 dark:text-zinc-300"
             >
-              Spill it
+              Spill it{hasMedia ? <span className="ml-1 font-normal text-zinc-400 dark:text-zinc-500">(optional)</span> : null}
             </label>
             <span
               className={`text-xs ${
@@ -420,6 +456,16 @@ function CreatePostForm() {
             className="min-h-[120px] w-full resize-none rounded-lg border border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-900 placeholder-zinc-400 focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-500 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-50 dark:placeholder-zinc-500"
           />
         </div>
+
+        {/* Media picker */}
+        {currentUserId && (
+          <MediaPicker
+            mediaFiles={mediaFiles}
+            onAddFiles={addMediaFiles}
+            onRemoveFile={removeMediaFile}
+            error={mediaError}
+          />
+        )}
 
         {/* Anonymous toggle */}
         <div>
@@ -504,7 +550,7 @@ function CreatePostForm() {
           disabled={!canSubmit}
           className="w-full rounded-lg bg-zinc-900 py-3 text-sm font-medium text-white transition-all duration-150 hover:bg-zinc-800 active:scale-[0.97] disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200"
         >
-          {loading ? "Posting..." : "Post"}
+          {loading ? "Posting..." : isUploading ? "Uploading media..." : "Post"}
         </button>
       </form>
     </div>

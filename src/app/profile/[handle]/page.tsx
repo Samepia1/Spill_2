@@ -7,6 +7,7 @@ import Avatar from "@/components/avatar";
 import AvatarUpload from "@/components/avatar-upload";
 import AvatarLightbox from "@/components/avatar-lightbox";
 import ProfileSortTabs from "@/components/profile-sort-tabs";
+import type { MediaItem } from "@/components/media-carousel";
 
 type SortValue = "top" | "newest" | "comments" | "ending";
 
@@ -56,7 +57,7 @@ export default async function ProfileHandlePage({
   let query = supabase
     .from("posts")
     .select(
-      "id, subject, body, is_anonymous, expires_at, like_count, comment_count, created_at, target:users!posts_target_user_id_fkey(handle, display_name, avatar_url), author:users!posts_author_user_id_fkey(handle, display_name, avatar_url), target_placeholder:placeholder_profiles!posts_target_placeholder_id_fkey(handle)"
+      "id, subject, body, is_anonymous, expires_at, like_count, comment_count, created_at, target:users!posts_target_user_id_fkey(handle, display_name, avatar_url), author:users!posts_author_user_id_fkey(handle, display_name, avatar_url), target_placeholder:placeholder_profiles!posts_target_placeholder_id_fkey(handle), post_media(id, public_url, media_type, thumbnail_url, display_order, width, height)"
     )
     .eq(targetColumn, targetId)
     .eq("status", "active")
@@ -171,6 +172,19 @@ export default async function ProfileHandlePage({
             const targetPlaceholder = post.target_placeholder as unknown as { handle: string } | null;
             const targetHandle = target?.handle ?? targetPlaceholder?.handle ?? "unknown";
             const postTargetIsPlaceholder = !target && !!targetPlaceholder;
+            const media = ((post.post_media as unknown as MediaItem[]) ?? [])
+              .sort((a, b) => (a as unknown as { display_order: number }).display_order - (b as unknown as { display_order: number }).display_order)
+              .map((m: unknown) => {
+                const item = m as { id: string; public_url: string; media_type: "image" | "video"; thumbnail_url: string | null; display_order: number; width: number | null; height: number | null };
+                return {
+                  id: item.id,
+                  publicUrl: item.public_url,
+                  mediaType: item.media_type,
+                  thumbnailUrl: item.thumbnail_url,
+                  width: item.width,
+                  height: item.height,
+                };
+              });
             return (
               <PostCard
                 key={post.id}
@@ -190,6 +204,7 @@ export default async function ProfileHandlePage({
                 commentCount={post.comment_count}
                 createdAt={post.created_at}
                 userHasLiked={userLikedPostIds.has(post.id)}
+                media={media}
               />
             );
           })

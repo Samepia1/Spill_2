@@ -6,11 +6,12 @@ import { timeRemaining } from "@/lib/time";
 import { toggleLike } from "@/app/actions";
 import ReportModal from "@/components/report-modal";
 import Avatar from "@/components/avatar";
+import MediaCarousel, { type MediaItem } from "@/components/media-carousel";
 
 export type PostCardProps = {
   id: string;
-  subject: string;
-  body: string;
+  subject: string | null;
+  body: string | null;
   targetHandle: string;
   targetDisplayName: string | null;
   targetIsPlaceholder?: boolean;
@@ -24,6 +25,7 @@ export type PostCardProps = {
   commentCount: number;
   createdAt: string;
   userHasLiked: boolean;
+  media?: MediaItem[];
 };
 
 export default function PostCard({
@@ -42,6 +44,7 @@ export default function PostCard({
   likeCount,
   commentCount,
   userHasLiked,
+  media,
 }: PostCardProps) {
   const [isPending, startTransition] = useTransition();
   const [optimisticLiked, setOptimisticLiked] = useState(userHasLiked);
@@ -110,14 +113,25 @@ export default function PostCard({
       </div>
 
       {/* Subject */}
-      <h3 className="mb-1 text-lg font-semibold text-zinc-900 dark:text-zinc-100">
-        {subject}
-      </h3>
+      {subject && (
+        <h3 className="mb-1 text-lg font-semibold text-zinc-900 dark:text-zinc-100">
+          {subject}
+        </h3>
+      )}
 
       {/* Body */}
-      <p className="mb-3 text-sm leading-relaxed text-zinc-700 dark:text-zinc-300">
-        {body}
-      </p>
+      {body && (
+        <p className="mb-3 text-sm leading-relaxed text-zinc-700 dark:text-zinc-300">
+          {body}
+        </p>
+      )}
+
+      {/* Media */}
+      {media && media.length > 0 && (
+        <div className="mb-3">
+          <MediaCarousel items={media} />
+        </div>
+      )}
 
       {/* Actions: like + comment */}
       <div className="flex items-center gap-4">

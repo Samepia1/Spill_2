@@ -23,7 +23,7 @@ export async function createPost(formData: FormData) {
   // 2. Get current user's profile
   const { data: profile } = await supabase
     .from("users")
-    .select("id, university_id, status")
+    .select("id, university_id, status, handle")
     .eq("id", user.id)
     .single();
 
@@ -36,16 +36,40 @@ export async function createPost(formData: FormData) {
     return { error: "Your account is suspended" };
   }
 
-  // 4. Validate subject
-  const trimmedSubject = subject?.trim() ?? "";
-  if (trimmedSubject.length < 1 || trimmedSubject.length > 200) {
-    return { error: "Subject must be between 1 and 200 characters" };
+  // 4. Parse media items
+  const mediaItemsRaw = formData.get("mediaItems") as string | null;
+  const mediaItems: Array<{
+    storagePath: string;
+    publicUrl: string;
+    mediaType: "image" | "video";
+    fileSizeBytes: number;
+    mimeType: string;
+    thumbnailUrl: string | null;
+    displayOrder: number;
+    width: number | null;
+    height: number | null;
+  }> = mediaItemsRaw ? JSON.parse(mediaItemsRaw) : [];
+  const hasMedia = mediaItems.length > 0;
+
+  if (mediaItems.length > 10) {
+    return { error: "Maximum 10 media files allowed" };
   }
 
-  // 5. Validate body
+  // 5. Validate subject (optional if media attached)
+  const trimmedSubject = subject?.trim() ?? "";
+  if (trimmedSubject.length > 200) {
+    return { error: "Subject must be 200 characters or less" };
+  }
+
+  // 6. Validate body (optional if media attached)
   const trimmedBody = body?.trim() ?? "";
-  if (trimmedBody.length < 1 || trimmedBody.length > 1000) {
-    return { error: "Body must be between 1 and 1000 characters" };
+  if (trimmedBody.length > 1000) {
+    return { error: "Body must be 1000 characters or less" };
+  }
+
+  // At least one form of content required
+  if (!trimmedSubject && !trimmedBody && !hasMedia) {
+    return { error: "Post must have text or media" };
   }
 
   // 6. Check daily rate limit (3 posts per 24 hours)
@@ -178,18 +202,47 @@ export async function createPost(formData: FormData) {
     }
 
     // Insert the post with placeholder target
-    const { error: postError } = await supabase.from("posts").insert({
+    const { data: newPost, error: postError } = await supabase.from("posts").insert({
       university_id: profile.university_id,
       author_user_id: user.id,
       target_user_id: null,
       target_placeholder_id: placeholderId,
-      subject: trimmedSubject,
-      body: trimmedBody,
+      subject: trimmedSubject || null,
+      body: trimmedBody || null,
       is_anonymous: isAnonymous,
+      media_count: mediaItems.length,
       ...(expires_at ? { expires_at } : {}),
-    });
+    }).select("id").single();
 
     if (postError) return { error: postError.message };
+
+    // ─── MODERATION HOOK ───────────────────────────────────────
+    // Future: call Google Vision API here to check each media file.
+    // If any file is flagged, set its moderation_status to 'rejected'
+    // and either block the post or mark it for review.
+    // For now, all media defaults to 'pending' status.
+    // ───────────────────────────────────────────────────────────
+
+    // Insert media items
+    if (mediaItems.length > 0 && newPost) {
+      const mediaRows = mediaItems.map((m) => ({
+        post_id: newPost.id,
+        university_id: profile.university_id,
+        storage_path: m.storagePath,
+        public_url: m.publicUrl,
+        media_type: m.mediaType,
+        file_size_bytes: m.fileSizeBytes,
+        mime_type: m.mimeType,
+        thumbnail_url: m.thumbnailUrl,
+        display_order: m.displayOrder,
+        width: m.width,
+        height: m.height,
+      }));
+
+      const { error: mediaError } = await supabase.from("post_media").insert(mediaRows);
+      if (mediaError) return { error: mediaError.message };
+    }
+
     redirect("/");
   }
 
@@ -241,18 +294,63 @@ export async function createPost(formData: FormData) {
   }
 
   // 14. Insert the post
-  const { error: insertError } = await supabase.from("posts").insert({
+  const { data: newPost, error: insertError } = await supabase.from("posts").insert({
     university_id: profile.university_id,
     author_user_id: user.id,
     target_user_id: target.id,
-    subject: trimmedSubject,
-    body: trimmedBody,
+    subject: trimmedSubject || null,
+    body: trimmedBody || null,
     is_anonymous: isAnonymous,
+    media_count: mediaItems.length,
     ...(expires_at ? { expires_at } : {}),
-  });
+  }).select("id").single();
 
   if (insertError) {
     return { error: insertError.message };
+  }
+
+  // ─── MODERATION HOOK ───────────────────────────────────────
+  // Future: call Google Vision API here to check each media file.
+  // If any file is flagged, set its moderation_status to 'rejected'
+  // and either block the post or mark it for review.
+  // For now, all media defaults to 'pending' status.
+  // ───────────────────────────────────────────────────────────
+
+  // Insert media items
+  if (mediaItems.length > 0 && newPost) {
+    const mediaRows = mediaItems.map((m) => ({
+      post_id: newPost.id,
+      university_id: profile.university_id,
+      storage_path: m.storagePath,
+      public_url: m.publicUrl,
+      media_type: m.mediaType,
+      file_size_bytes: m.fileSizeBytes,
+      mime_type: m.mimeType,
+      thumbnail_url: m.thumbnailUrl,
+      display_order: m.displayOrder,
+      width: m.width,
+      height: m.height,
+    }));
+
+    const { error: mediaError } = await supabase.from("post_media").insert(mediaRows);
+    if (mediaError) return { error: mediaError.message };
+  }
+
+  // Notify target user
+  if (newPost) {
+    try {
+      await supabase.from("notifications").insert({
+        university_id: profile.university_id,
+        recipient_id: target.id,
+        actor_id: user.id,
+        type: "new_post",
+        post_id: newPost.id,
+        actor_handle: isAnonymous ? null : profile.handle,
+        post_subject: trimmedSubject || "(media post)",
+      });
+    } catch {
+      // Fire-and-forget
+    }
   }
 
   redirect("/");
@@ -272,6 +370,14 @@ export async function getCurrentUserHandle(): Promise<string | null> {
     .single();
 
   return data?.handle ?? null;
+}
+
+export async function getCurrentUserId(): Promise<string | null> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  return user?.id ?? null;
 }
 
 export async function checkPhoneNumber(phone: string): Promise<

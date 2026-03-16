@@ -6,6 +6,7 @@ import PostCard from "@/components/post-card";
 import CommentList, { type SafeComment } from "@/components/comment-list";
 import CommentComposer from "@/components/comment-composer";
 import { createComment } from "./actions";
+import type { MediaItem } from "@/components/media-carousel";
 
 export default async function ThreadPage({
   params,
@@ -25,7 +26,7 @@ export default async function ThreadPage({
   const { data: post } = await supabase
     .from("posts")
     .select(
-      "id, subject, body, author_user_id, target_user_id, university_id, is_anonymous, expires_at, like_count, comment_count, created_at, status, target:users!posts_target_user_id_fkey(handle, display_name, avatar_url), author:users!posts_author_user_id_fkey(handle, display_name, avatar_url), target_placeholder:placeholder_profiles!posts_target_placeholder_id_fkey(handle)"
+      "id, subject, body, author_user_id, target_user_id, university_id, is_anonymous, expires_at, like_count, comment_count, created_at, status, target:users!posts_target_user_id_fkey(handle, display_name, avatar_url), author:users!posts_author_user_id_fkey(handle, display_name, avatar_url), target_placeholder:placeholder_profiles!posts_target_placeholder_id_fkey(handle), post_media(id, public_url, media_type, thumbnail_url, display_order, width, height)"
     )
     .eq("id", id)
     .single();
@@ -45,6 +46,20 @@ export default async function ThreadPage({
   const targetPlaceholder = post.target_placeholder as unknown as { handle: string } | null;
   const targetHandle = target?.handle ?? targetPlaceholder?.handle ?? "unknown";
   const targetIsPlaceholder = !target && !!targetPlaceholder;
+
+  const media = ((post.post_media as unknown as MediaItem[]) ?? [])
+    .sort((a, b) => (a as unknown as { display_order: number }).display_order - (b as unknown as { display_order: number }).display_order)
+    .map((m: unknown) => {
+      const item = m as { id: string; public_url: string; media_type: "image" | "video"; thumbnail_url: string | null; display_order: number; width: number | null; height: number | null };
+      return {
+        id: item.id,
+        publicUrl: item.public_url,
+        mediaType: item.media_type,
+        thumbnailUrl: item.thumbnail_url,
+        width: item.width,
+        height: item.height,
+      };
+    });
 
   const remaining = timeRemaining(post.expires_at);
   const isExpired = remaining === "Expired";
@@ -168,6 +183,7 @@ export default async function ThreadPage({
           commentCount={post.comment_count}
           createdAt={post.created_at}
           userHasLiked={!!existingLike}
+          media={media}
         />
       </div>
 

@@ -35,10 +35,17 @@ type ReportCardProps = {
   createdAt: string;
 };
 
+type PostMediaItem = {
+  public_url: string;
+  media_type: "image" | "video";
+  thumbnail_url: string | null;
+};
+
 type EntityContent = {
   loaded: boolean;
   text: string | null;
   authorHandle?: string;
+  media?: PostMediaItem[];
 };
 
 export default function ReportCard({
@@ -71,12 +78,15 @@ export default function ReportCard({
     if (entityType === "post") {
       const { data } = await supabase
         .from("posts")
-        .select("subject, body")
+        .select("subject, body, post_media(public_url, media_type, thumbnail_url)")
         .eq("id", entityId)
         .single();
+      const mediaItems = (data?.post_media ?? []) as unknown as PostMediaItem[];
+      const textParts = [data?.subject, data?.body].filter(Boolean).join("\n\n");
       setContent({
         loaded: true,
-        text: data ? `${data.subject}\n\n${data.body}` : "[Post not found]",
+        text: data ? (textParts || "[Media-only post]") : "[Post not found]",
+        media: mediaItems,
       });
     } else if (entityType === "comment") {
       const { data } = await supabase
@@ -190,6 +200,19 @@ export default function ReportCard({
           <p className="whitespace-pre-wrap text-sm text-zinc-700 dark:text-zinc-300">
             {content.text}
           </p>
+          {content.media && content.media.length > 0 && (
+            <div className="mt-2 grid grid-cols-2 gap-2">
+              {content.media.map((m, i) => (
+                <div key={i} className="relative aspect-square overflow-hidden rounded-lg bg-zinc-200 dark:bg-zinc-700">
+                  {m.media_type === "image" ? (
+                    <img src={m.public_url} alt="" className="h-full w-full object-cover" />
+                  ) : (
+                    <img src={m.thumbnail_url ?? ""} alt="Video thumbnail" className="h-full w-full object-cover" />
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 

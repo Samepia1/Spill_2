@@ -26,3 +26,28 @@ export async function compressImage(
   const blob = await canvas.convertToBlob({ type: "image/jpeg", quality });
   return new File([blob], "avatar.jpg", { type: "image/jpeg" });
 }
+
+/**
+ * Compresses a post image: preserves aspect ratio, fits within maxDim x maxDim.
+ * Returns a JPEG File with original dimensions info.
+ */
+export async function compressPostImage(
+  file: File,
+  maxDim = 1920,
+  quality = 0.85
+): Promise<{ file: File; width: number; height: number }> {
+  const bitmap = await createImageBitmap(file);
+
+  const scale = Math.min(1, maxDim / Math.max(bitmap.width, bitmap.height));
+  const w = Math.round(bitmap.width * scale);
+  const h = Math.round(bitmap.height * scale);
+
+  const canvas = new OffscreenCanvas(w, h);
+  const ctx = canvas.getContext("2d")!;
+  ctx.drawImage(bitmap, 0, 0, w, h);
+  bitmap.close();
+
+  const blob = await canvas.convertToBlob({ type: "image/jpeg", quality });
+  const compressed = new File([blob], "photo.jpg", { type: "image/jpeg" });
+  return { file: compressed, width: w, height: h };
+}

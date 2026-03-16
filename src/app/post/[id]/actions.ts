@@ -23,7 +23,7 @@ export async function createComment(postId: string, body: string, isAnonymous: b
   // Get current user's profile
   const { data: profile } = await supabase
     .from("users")
-    .select("id, university_id, status")
+    .select("id, university_id, status, handle")
     .eq("id", user.id)
     .single();
 
@@ -38,7 +38,7 @@ export async function createComment(postId: string, body: string, isAnonymous: b
   // Fetch the post — must exist, be active, not expired, same university
   const { data: post } = await supabase
     .from("posts")
-    .select("id, university_id, status, expires_at")
+    .select("id, university_id, status, expires_at, author_user_id, subject")
     .eq("id", postId)
     .single();
 
@@ -95,6 +95,23 @@ export async function createComment(postId: string, body: string, isAnonymous: b
 
   if (insertError) {
     return { error: insertError.message };
+  }
+
+  // Notify post author if commenter is not the author
+  if (post.author_user_id !== user.id) {
+    try {
+      await supabase.from("notifications").insert({
+        university_id: profile.university_id,
+        recipient_id: post.author_user_id,
+        actor_id: user.id,
+        type: "new_comment",
+        post_id: postId,
+        actor_handle: isAnonymous ? null : profile.handle,
+        post_subject: post.subject || "(media post)",
+      });
+    } catch {
+      // Fire-and-forget
+    }
   }
 
   revalidatePath(`/post/${postId}`);

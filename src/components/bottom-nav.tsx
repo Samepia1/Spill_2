@@ -16,8 +16,10 @@ const hideOnRoutes = ["/login", "/verify", "/onboarding"];
 
 export default function BottomNav({
   isModerator = false,
+  userHandle,
 }: {
   isModerator?: boolean;
+  userHandle?: string | null;
 }) {
   const pathname = usePathname();
 
@@ -26,19 +28,21 @@ export default function BottomNav({
   }
 
   const tabs = isModerator ? [...baseTabs, modTab] : baseTabs;
+  const profileHref = userHandle ? `/profile/${userHandle}` : "/profile";
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-50 border-t border-zinc-200 bg-white/80 backdrop-blur-lg dark:border-zinc-800 dark:bg-zinc-950/80">
       <div className="mx-auto flex max-w-lg items-center justify-around py-2">
         {tabs.map((tab) => {
+          const href = tab.href === "/profile" ? profileHref : tab.href;
           const isActive =
-            tab.href === "/"
+            href === "/"
               ? pathname === "/"
               : pathname.startsWith(tab.href);
           return (
             <Link
               key={tab.href}
-              href={tab.href}
+              href={href}
               className={`flex flex-col items-center gap-0.5 px-3 py-1 text-xs transition-all duration-150 active:scale-[0.92] active:opacity-80 ${
                 isActive
                   ? "text-zinc-900 dark:text-zinc-100"

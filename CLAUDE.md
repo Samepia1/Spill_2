@@ -27,8 +27,8 @@ src/
 │   │   ├── verify/page.tsx     # 6-digit OTP input → verify → redirect to /onboarding or /
 │   │   └── onboarding/page.tsx # Handle + display name → create public.users row
 │   ├── create/
-│   │   ├── page.tsx            # Post creation form (target picker, subject, body, anonymous toggle, expiration toggle)
-│   │   └── actions.ts          # Server actions: createPost, getCurrentUserHandle, searchTargetUsers, checkPhoneNumber
+│   │   ├── page.tsx            # Post creation form (target picker, subject, body, media picker, anonymous toggle, expiration toggle)
+│   │   └── actions.ts          # Server actions: createPost, getCurrentUserHandle, getCurrentUserId, searchTargetUsers, checkPhoneNumber
 │   ├── search/
 │   │   ├── page.tsx            # Search users page (activity-ranked, infinite scroll)
 │   │   └── actions.ts          # Server action: searchUsersRanked (RPC, paginated)
@@ -51,6 +51,8 @@ src/
 │   ├── comment-composer.tsx    # Comment input with identity choice (anonymous/revealed, locked per thread)
 │   ├── avatar.tsx              # Reusable Avatar component (xs/sm/md/lg, anonymous silhouette, image, placeholder)
 │   ├── avatar-upload.tsx       # Avatar upload component (file picker, Supabase Storage upload, server action save)
+│   ├── media-picker.tsx        # Post media file picker (grid preview, upload progress, add/remove)
+│   ├── media-carousel.tsx      # Swipeable media carousel (scroll-snap, dot indicators, video play)
 │   ├── comment-list.tsx        # Comment list (Anon N or @handle, OP badge, report flags, avatars)
 │   ├── feed-tabs.tsx           # Trending/New/Ending tab selector (useTransition for pending state)
 │   ├── profile-sort-tabs.tsx   # Profile sort tabs (Top/Newest/Comments/Ending, useTransition)
@@ -61,11 +63,15 @@ src/
 ├── lib/
 │   ├── time.ts                 # formatRelativeTime, timeRemaining (nullable) helpers
 │   ├── phone.ts                # normalizePhone, formatPhoneDisplay, lastFour helpers
+│   ├── compress-image.ts       # compressImage (avatar, square crop) + compressPostImage (preserve aspect ratio)
+│   ├── video-thumbnail.ts      # captureVideoThumbnail (canvas frame capture) + getVideoDimensions
 │   ├── current-user.ts         # getCurrentUser() — fetches auth user + public profile
 │   └── supabase/
 │       ├── client.ts           # Browser Supabase client (createBrowserClient)
 │       ├── server.ts           # Server Supabase client (createServerClient with cookies)
 │       └── middleware.ts       # Supabase client for proxy context (cookie read/write on req/res)
+├── hooks/
+│   └── use-media-upload.ts     # Multi-file upload hook (validation, compression, Supabase Storage upload)
 └── proxy.ts                    # Route protection — public routes, onboarding, /mod (role check), protected
 
 supabase/
@@ -87,7 +93,8 @@ supabase/
     ├── 015_posts_placeholder_target.sql    # Add target_placeholder_id to posts, XOR constraint
     ├── 016_users_phone_number.sql          # Add phone_number to users table
     ├── 017_placeholder_counters.sql        # Triggers for placeholder post_count and unique_poster_count
-    └── 018_search_rpc_placeholder.sql      # Update search RPC to include placeholder profiles
+    ├── 018_search_rpc_placeholder.sql      # Update search RPC to include placeholder profiles
+    └── 019_post_media.sql                 # Post media table, storage bucket, nullable subject/body, media_count trigger
 ```
 
 ## Auth Flow (fully working)
@@ -110,7 +117,8 @@ supabase/
 - **universities**: id, name, email_domain (seeded with umn.edu, test.edu)
 - **users**: id (refs auth.users), university_id, email, handle, display_name, avatar_url (nullable), phone_number (nullable), role (`user`/`moderator`/`admin`), status (`active`/`suspended`/`deleted`)
 - **placeholder_profiles**: id, phone_number (E.164), phone_last_four, handle (generated `phone_XXXX`), university_id, created_by, claimed_by (nullable), claimed_at, post_count, unique_poster_count. UNIQUE(phone_number, university_id). RLS university-scoped.
-- **posts**: id, university_id, author_user_id, target_user_id (nullable), target_placeholder_id (nullable, FK to placeholder_profiles), subject (1-200 chars), body (1-1000 chars), is_anonymous (bool, default true), expires_at (nullable timestamptz), like_count, comment_count, status (`active`/`expired`/`removed`), removed_at, removed_by, removal_reason. XOR constraint: exactly one of target_user_id or target_placeholder_id must be set.
+- **posts**: id, university_id, author_user_id, target_user_id (nullable), target_placeholder_id (nullable, FK to placeholder_profiles), subject (nullable, 1-200 chars), body (nullable, 1-1000 chars), media_count (int, default 0), is_anonymous (bool, default true), expires_at (nullable timestamptz), like_count, comment_count, status (`active`/`expired`/`removed`), removed_at, removed_by, removal_reason. XOR constraint: exactly one of target_user_id or target_placeholder_id must be set. Content constraint: at least one of subject, body, or media_count > 0.
+- **post_media**: id, post_id (FK → posts, CASCADE), university_id, storage_path, public_url, media_type (`image`/`video`), file_size_bytes, mime_type, width (nullable), height (nullable), thumbnail_url (nullable, for videos), display_order, moderation_status (`pending`/`approved`/`rejected`, default `pending`), moderation_checked_at (nullable). RLS university-scoped. Trigger updates `posts.media_count`.
 - **comments**: id, post_id, university_id, author_user_id, body (1-300 chars), is_anonymous (bool, default true), parent_comment_id, status (`active`/`removed`), removed_at, removed_by, removal_reason
 - **likes**: post_id + user_id (unique)
 - **reports**: reporter_user_id, entity_type (`post`/`comment`/`user`), entity_id, reason, details, status (`open`/`reviewed`/`dismissed`)
@@ -159,6 +167,7 @@ supabase/
 15. **Button press feedback**: All interactive elements have `active:` Tailwind states (scale/opacity) for tap/click feedback. Global `-webkit-tap-highlight-color: transparent` suppresses browser defaults.
 16. **Loading skeletons**: `loading.tsx` files for feed, profile, thread, and mod pages show skeleton UI during navigation.
 17. **Fast tab switching**: Feed tabs and profile sort tabs use `useTransition` for instant pending state during server re-renders.
+18. **Post media**: Photos and short videos (up to 10 per post, 10MB images / 50MB videos / 30s max video). Client-side image compression via `compressPostImage`. Videos uploaded as-is with canvas-based thumbnail capture. Supabase Storage bucket `post-media`. Displayed in a CSS scroll-snap carousel with dot indicators. Subject/body become optional when media is attached. `moderation_status` column on `post_media` table prepared for future Google Vision API integration.
 
 ## Theme System
 - **Class-based dark mode**: Tailwind v4 `@custom-variant dark` in `globals.css` — activates `dark:` utilities via `.dark` class on `<html>`
@@ -216,3 +225,8 @@ npm run lint   # ESLint
 - **Dual-target posts**: Post queries must join on both `target:users!posts_target_user_id_fkey(...)` and `target_placeholder:placeholder_profiles!posts_target_placeholder_id_fkey(handle)`. Use `target?.handle ?? targetPlaceholder?.handle ?? "unknown"` to resolve the display handle.
 - **Phone normalization**: Always use `normalizePhone()` from `src/lib/phone.ts` before storing or comparing phone numbers. All phones stored in E.164 format.
 - **Placeholder XOR constraint**: When inserting posts, explicitly set the unused target to `null` (e.g., `target_user_id: null` for placeholder posts). The CHECK constraint requires exactly one non-null target.
+- **Post media uploads**: Eager upload during form editing (before submit) via `useMediaUpload` hook. Files go to `post-media` bucket at `{userId}/{tempPostId}/{order}_{uuid}.{ext}`. Media metadata (URLs, paths) sent as JSON in FormData on submit, then inserted into `post_media` table server-side.
+- **Post media queries**: Add `post_media(id, public_url, media_type, thumbnail_url, display_order, width, height)` to any `.select()` on posts. Sort by `display_order` in JS. Map snake_case DB columns to camelCase `MediaItem` type.
+- **media_count on post INSERT**: Must pass `media_count` explicitly when inserting a post with media. The trigger on `post_media` fires after the media rows are inserted, but the `posts_content_required` CHECK constraint fires at post insert time.
+- **Nullable subject/body**: Posts with media can have null subject and/or body. PostCard conditionally renders them. Always use `subject || null` (not empty string) when inserting.
+- **Moderation hook**: `post_media.moderation_status` defaults to `'pending'`. Commented hook point in `createPost` server action marks where Google Vision API check should be added. Future implementation should update status to `'approved'` or `'rejected'` per media file.
