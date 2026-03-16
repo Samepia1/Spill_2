@@ -7,6 +7,7 @@ import { toggleLike } from "@/app/actions";
 import ReportModal from "@/components/report-modal";
 import Avatar from "@/components/avatar";
 import MediaCarousel, { type MediaItem } from "@/components/media-carousel";
+import MentionText from "@/components/mention-text";
 
 export type PostCardProps = {
   id: string;
@@ -121,9 +122,7 @@ export default function PostCard({
 
       {/* Body */}
       {body && (
-        <p className="mb-3 text-sm leading-relaxed text-zinc-700 dark:text-zinc-300">
-          {body}
-        </p>
+        <MentionText text={body} className="mb-3 block text-sm leading-relaxed text-zinc-700 dark:text-zinc-300" />
       )}
 
       {/* Media */}

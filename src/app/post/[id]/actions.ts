@@ -2,11 +2,20 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
+import {
+  extractMentionedHandles,
+  extractMentionedAnonNumbers,
+  buildAnonMap,
+  invertAnonMap,
+  displayLength,
+} from "@/lib/mentions";
 
 export async function createComment(postId: string, body: string, isAnonymous: boolean = true) {
   const trimmed = body?.trim() ?? "";
 
-  if (trimmed.length < 1 || trimmed.length > 300) {
+  // Validate using display length (raw tokens are longer than what user sees)
+  const visibleLength = displayLength(trimmed);
+  if (visibleLength < 1 || visibleLength > 300) {
     return { error: "Comment must be between 1 and 300 characters" };
   }
 
@@ -38,7 +47,7 @@ export async function createComment(postId: string, body: string, isAnonymous: b
   // Fetch the post — must exist, be active, not expired, same university
   const { data: post } = await supabase
     .from("posts")
-    .select("id, university_id, status, expires_at, author_user_id, subject")
+    .select("id, university_id, status, expires_at, author_user_id, subject, is_anonymous")
     .eq("id", postId)
     .single();
 
@@ -84,14 +93,18 @@ export async function createComment(postId: string, body: string, isAnonymous: b
     return { error: "Too many comments. Try again later." };
   }
 
-  // Insert comment
-  const { error: insertError } = await supabase.from("comments").insert({
-    post_id: postId,
-    university_id: profile.university_id,
-    author_user_id: user.id,
-    body: trimmed,
-    is_anonymous: isAnonymous,
-  });
+  // Insert comment — capture the new comment's ID for mention notifications
+  const { data: newComment, error: insertError } = await supabase
+    .from("comments")
+    .insert({
+      post_id: postId,
+      university_id: profile.university_id,
+      author_user_id: user.id,
+      body: trimmed,
+      is_anonymous: isAnonymous,
+    })
+    .select("id")
+    .single();
 
   if (insertError) {
     return { error: insertError.message };
@@ -112,6 +125,71 @@ export async function createComment(postId: string, body: string, isAnonymous: b
     } catch {
       // Fire-and-forget
     }
+  }
+
+  // Send mention notifications
+  try {
+    const mentionedHandles = extractMentionedHandles(trimmed);
+    const mentionedAnonNumbers = extractMentionedAnonNumbers(trimmed);
+
+    if (mentionedHandles.length > 0 || mentionedAnonNumbers.length > 0) {
+      const recipientIds = new Set<string>();
+
+      // Resolve @handle mentions to user IDs
+      if (mentionedHandles.length > 0) {
+        const { data: mentionedUsers } = await supabase
+          .from("users")
+          .select("id, handle")
+          .in("handle", mentionedHandles)
+          .eq("university_id", profile.university_id);
+
+        for (const u of mentionedUsers ?? []) {
+          if (u.id !== user.id) {
+            recipientIds.add(u.id);
+          }
+        }
+      }
+
+      // Resolve @anonN mentions to user IDs via anonMap
+      if (mentionedAnonNumbers.length > 0) {
+        // Fetch all comments for this post to rebuild the anonMap
+        const { data: allComments } = await supabase
+          .from("comments")
+          .select("author_user_id, is_anonymous")
+          .eq("post_id", postId)
+          .order("created_at", { ascending: true });
+
+        const anonMap = buildAnonMap(
+          post.author_user_id,
+          post.is_anonymous,
+          allComments ?? []
+        );
+        const inverted = invertAnonMap(anonMap);
+
+        for (const num of mentionedAnonNumbers) {
+          const userId = inverted.get(num);
+          if (userId && userId !== user.id) {
+            recipientIds.add(userId);
+          }
+        }
+      }
+
+      // Insert a notification for each mentioned user
+      for (const recipientId of recipientIds) {
+        await supabase.from("notifications").insert({
+          university_id: profile.university_id,
+          recipient_id: recipientId,
+          actor_id: user.id,
+          type: "new_mention",
+          post_id: postId,
+          comment_id: newComment.id,
+          actor_handle: isAnonymous ? null : profile.handle,
+          post_subject: post.subject || "(media post)",
+        });
+      }
+    }
+  } catch {
+    // Fire-and-forget — mention notifications should never block the comment
   }
 
   revalidatePath(`/post/${postId}`);

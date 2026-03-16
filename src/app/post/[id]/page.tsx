@@ -1,12 +1,16 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
+import { Suspense } from "react";
 import { createClient } from "@/lib/supabase/server";
 import { timeRemaining } from "@/lib/time";
 import PostCard from "@/components/post-card";
 import CommentList, { type SafeComment } from "@/components/comment-list";
 import CommentComposer from "@/components/comment-composer";
+import ScrollToComment from "@/components/scroll-to-comment";
 import { createComment } from "./actions";
 import type { MediaItem } from "@/components/media-carousel";
+import type { ThreadParticipant } from "@/components/mention-autocomplete";
+import { buildAnonMap } from "@/lib/mentions";
 
 export default async function ThreadPage({
   params,
@@ -81,20 +85,11 @@ export default async function ThreadPage({
     .order("created_at", { ascending: true });
 
   // Build anonymous identity map (only for anonymous participants)
-  const anonMap = new Map<string, number>();
-  let anonCounter = 1;
-
-  // If OP posted anonymously, reserve Anon 1 for them
-  if (post.is_anonymous) {
-    anonMap.set(post.author_user_id, anonCounter++);
-  }
-
-  // Assign anon numbers to anonymous commenters
-  for (const comment of comments ?? []) {
-    if (comment.is_anonymous && !anonMap.has(comment.author_user_id)) {
-      anonMap.set(comment.author_user_id, anonCounter++);
-    }
-  }
+  const anonMap = buildAnonMap(
+    post.author_user_id,
+    post.is_anonymous,
+    (comments ?? []).map((c) => ({ author_user_id: c.author_user_id, is_anonymous: c.is_anonymous }))
+  );
 
   // Determine current user's existing identity choice in this thread
   const currentUserComment = (comments ?? []).find(
@@ -139,6 +134,34 @@ export default async function ThreadPage({
       status: c.status,
     };
   });
+
+  // Build thread participants for mention autocomplete
+  const threadParticipants: ThreadParticipant[] = [];
+  const seenParticipants = new Set<string>();
+
+  // Add OP
+  if (post.is_anonymous) {
+    threadParticipants.push({ label: "Anon 1", type: "anon", id: "1", avatarUrl: null, isAnonymous: true });
+    seenParticipants.add("anon:1");
+  } else if (postAuthor) {
+    threadParticipants.push({ label: postAuthor.handle, type: "user", id: postAuthor.handle, avatarUrl: postAuthor.avatar_url, isAnonymous: false });
+    seenParticipants.add(`user:${postAuthor.handle}`);
+  }
+
+  // Add unique commenters
+  for (const c of safeComments) {
+    if (c.status !== "active") continue;
+    const key = c.isAnonymous ? `anon:${c.anonNumber}` : `user:${c.handle}`;
+    if (seenParticipants.has(key)) continue;
+    seenParticipants.add(key);
+    threadParticipants.push({
+      label: c.isAnonymous ? `Anon ${c.anonNumber}` : c.handle!,
+      type: c.isAnonymous ? "anon" : "user",
+      id: c.isAnonymous ? String(c.anonNumber) : c.handle!,
+      avatarUrl: c.avatarUrl,
+      isAnonymous: c.isAnonymous,
+    });
+  }
 
   // Bind the server action with postId
   async function boundCreateComment(
@@ -204,6 +227,11 @@ export default async function ThreadPage({
         <CommentList comments={safeComments} />
       </div>
 
+      {/* Scroll to comment from notification link */}
+      <Suspense fallback={null}>
+        <ScrollToComment />
+      </Suspense>
+
       {/* Composer (only if post is active) */}
       {isActive && (
         <CommentComposer
@@ -211,6 +239,7 @@ export default async function ThreadPage({
           identityMode={identityMode}
           userHandle={currentUserProfile?.handle ?? ""}
           currentUserAnonNumber={currentUserAnonNumber}
+          threadParticipants={threadParticipants}
         />
       )}
     </div>

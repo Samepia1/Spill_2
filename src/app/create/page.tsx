@@ -1,11 +1,13 @@
 "use client";
 
-import { useState, useEffect, useRef, useMemo, Suspense } from "react";
+import { useState, useEffect, useRef, useMemo, useCallback, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { searchTargetUsers, createPost, getCurrentUserHandle, getCurrentUserId, checkPhoneNumber } from "./actions";
 import Avatar from "@/components/avatar";
 import MediaPicker from "@/components/media-picker";
 import { useMediaUpload } from "@/hooks/use-media-upload";
+import MentionAutocomplete from "@/components/mention-autocomplete";
+import { mentionToken, displayLength } from "@/lib/mentions";
 
 function CreatePostForm() {
   const searchParams = useSearchParams();
@@ -23,7 +25,9 @@ function CreatePostForm() {
   >([]);
   const [showTargetPicker, setShowTargetPicker] = useState(false);
   const [subject, setSubject] = useState("");
-  const [body, setBody] = useState("");
+  const [displayBody, setDisplayBody] = useState("");
+  const [rawBody, setRawBody] = useState("");
+  const bodyRef = useRef<HTMLTextAreaElement>(null);
   const [isAnonymous, setIsAnonymous] = useState(true);
   const [expires, setExpires] = useState(false);
   const [expiresInHours, setExpiresInHours] = useState(24);
@@ -178,6 +182,98 @@ function CreatePostForm() {
     setPhoneResult(null);
   }
 
+  // Dual-state text management for mention autocomplete in body
+  function displayToRawIndex(displayIdx: number): number {
+    const mentionRegex = /@\[([^\]]+)\]\((\w+):([^)]+)\)/g;
+    let match;
+    let lastRawEnd = 0;
+    let dispIdx = 0;
+
+    const matches: Array<{ rawStart: number; rawEnd: number; displayLen: number }> = [];
+    while ((match = mentionRegex.exec(rawBody)) !== null) {
+      matches.push({ rawStart: match.index, rawEnd: match.index + match[0].length, displayLen: match[1].length + 1 });
+    }
+
+    for (const m of matches) {
+      const plainBefore = m.rawStart - lastRawEnd;
+      if (dispIdx + plainBefore >= displayIdx) return lastRawEnd + (displayIdx - dispIdx);
+      dispIdx += plainBefore;
+      if (dispIdx + m.displayLen >= displayIdx) return m.rawEnd;
+      dispIdx += m.displayLen;
+      lastRawEnd = m.rawEnd;
+    }
+    return lastRawEnd + (displayIdx - dispIdx);
+  }
+
+  const handleBodyChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const newDisplay = e.target.value;
+    if (newDisplay.length > displayBody.length) {
+      const insertPos = (e.target.selectionStart ?? newDisplay.length) - (newDisplay.length - displayBody.length);
+      const inserted = newDisplay.slice(insertPos, insertPos + (newDisplay.length - displayBody.length));
+      const rawInsertPos = displayToRawIndex(insertPos);
+      setRawBody(rawBody.slice(0, rawInsertPos) + inserted + rawBody.slice(rawInsertPos));
+    } else {
+      const deleteStart = e.target.selectionStart ?? 0;
+      const charsRemoved = displayBody.length - newDisplay.length;
+      // Check if deletion hits a mention token
+      const mentionRegex = /@\[([^\]]+)\]\((\w+):([^)]+)\)/g;
+      let match;
+      let newRaw = rawBody;
+      let handled = false;
+
+      // Rebuild position map
+      const mentions: Array<{ rawStart: number; rawEnd: number; dispStart: number; dispEnd: number; token: string }> = [];
+      let dIdx = 0;
+      let lastEnd = 0;
+      while ((match = mentionRegex.exec(rawBody)) !== null) {
+        dIdx += match.index - lastEnd;
+        mentions.push({ rawStart: match.index, rawEnd: match.index + match[0].length, dispStart: dIdx, dispEnd: dIdx + match[1].length + 1, token: match[0] });
+        dIdx += match[1].length + 1;
+        lastEnd = match.index + match[0].length;
+      }
+
+      for (const m of mentions) {
+        if (deleteStart < m.dispEnd && deleteStart + charsRemoved > m.dispStart) {
+          newRaw = rawBody.slice(0, m.rawStart) + rawBody.slice(m.rawEnd);
+          handled = true;
+          break;
+        }
+      }
+
+      if (!handled) {
+        const rawDeleteStart = displayToRawIndex(deleteStart);
+        newRaw = rawBody.slice(0, rawDeleteStart) + rawBody.slice(rawDeleteStart + charsRemoved);
+      }
+      setRawBody(newRaw);
+    }
+    setDisplayBody(newDisplay);
+  }, [displayBody, rawBody]);
+
+  const handleBodyMention = useCallback((
+    mention: { label: string; type: "user" | "anon"; id: string },
+    atIndex: number,
+    queryLength: number
+  ) => {
+    const displayLabel = mention.label;
+    const displayInsert = `@${displayLabel} `;
+    const rawInsert = mentionToken(displayLabel, mention.type, mention.id) + " ";
+
+    const newDisplay = displayBody.slice(0, atIndex) + displayInsert + displayBody.slice(atIndex + queryLength);
+    const rawAtIndex = displayToRawIndex(atIndex);
+    const newRaw = rawBody.slice(0, rawAtIndex) + rawInsert + rawBody.slice(rawAtIndex + queryLength);
+
+    setDisplayBody(newDisplay);
+    setRawBody(newRaw);
+
+    setTimeout(() => {
+      if (bodyRef.current) {
+        const newCursor = atIndex + displayInsert.length;
+        bodyRef.current.focus();
+        bodyRef.current.setSelectionRange(newCursor, newCursor);
+      }
+    }, 0);
+  }, [displayBody, rawBody]);
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
@@ -190,7 +286,7 @@ function CreatePostForm() {
       formData.set("targetHandle", targetHandle);
     }
     formData.set("subject", subject);
-    formData.set("body", body);
+    formData.set("body", rawBody);
     formData.set("isAnonymous", String(isAnonymous));
     if (expires) {
       formData.set("expiresInHours", String(expiresInHours));
@@ -226,9 +322,9 @@ function CreatePostForm() {
   }
 
   const subjectLength = subject.length;
-  const bodyLength = body.length;
+  const bodyLength = displayBody.length;
   const hasMedia = mediaFiles.some((f) => f.status === "done");
-  const hasText = subject.trim().length > 0 || body.trim().length > 0;
+  const hasText = subject.trim().length > 0 || displayBody.trim().length > 0;
   const canSubmit =
     targetHandle.length > 0 &&
     (hasText || hasMedia) &&
@@ -446,15 +542,22 @@ function CreatePostForm() {
               {bodyLength}/1000
             </span>
           </div>
-          <textarea
-            id="body"
-            placeholder="Write your confession..."
-            value={body}
-            onChange={(e) => setBody(e.target.value.slice(0, 1000))}
-            maxLength={1000}
-            rows={5}
-            className="min-h-[120px] w-full resize-none rounded-lg border border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-900 placeholder-zinc-400 focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-500 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-50 dark:placeholder-zinc-500"
-          />
+          <div className="relative">
+            <MentionAutocomplete
+              textareaRef={bodyRef}
+              value={displayBody}
+              onInsertMention={handleBodyMention}
+            />
+            <textarea
+              id="body"
+              ref={bodyRef}
+              placeholder="Write your confession..."
+              value={displayBody}
+              onChange={handleBodyChange}
+              rows={5}
+              className="min-h-[120px] w-full resize-none rounded-lg border border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-900 placeholder-zinc-400 focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-500 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-50 dark:placeholder-zinc-500"
+            />
+          </div>
         </div>
 
         {/* Media picker */}

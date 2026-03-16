@@ -92,3 +92,45 @@ export async function toggleLike(postId: string) {
   revalidatePath(`/post/${postId}`);
   return { liked: true };
 }
+
+/**
+ * Searches users by handle or display_name for @mention autocomplete.
+ * Returns up to 10 matches with avatar info.
+ */
+export async function searchMentionUsers(query: string): Promise<
+  | {
+      data: Array<{
+        id: string;
+        handle: string;
+        display_name: string | null;
+        avatar_url: string | null;
+      }>;
+    }
+  | { error: string }
+> {
+  if (!query || query.length < 1) {
+    return { data: [] };
+  }
+
+  const supabase = await createClient();
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return { error: "Not authenticated" };
+  }
+
+  const { data, error } = await supabase
+    .from("users")
+    .select("id, handle, display_name, avatar_url")
+    .or(`handle.ilike.%${query}%,display_name.ilike.%${query}%`)
+    .limit(10);
+
+  if (error) {
+    return { error: error.message };
+  }
+
+  return { data: data ?? [] };
+}

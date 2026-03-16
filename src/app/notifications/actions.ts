@@ -6,6 +6,7 @@ export type Notification = {
   id: string;
   type: string;
   post_id: string;
+  comment_id: string | null;
   actor_handle: string | null;
   post_subject: string;
   is_read: boolean;
@@ -21,7 +22,7 @@ export async function getNotifications(): Promise<Notification[]> {
 
   const { data } = await supabase
     .from("notifications")
-    .select("id, type, post_id, actor_handle, post_subject, is_read, created_at")
+    .select("id, type, post_id, comment_id, actor_handle, post_subject, is_read, created_at")
     .eq("recipient_id", user.id)
     .order("created_at", { ascending: false })
     .limit(20);

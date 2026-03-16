@@ -4,6 +4,7 @@ import { useState } from "react";
 import { formatRelativeTime } from "@/lib/time";
 import ReportModal from "@/components/report-modal";
 import Avatar from "@/components/avatar";
+import MentionText from "@/components/mention-text";
 
 export type SafeComment = {
   id: string;
@@ -37,6 +38,8 @@ export default function CommentList({ comments }: { comments: SafeComment[] }) {
       {comments.map((comment) => (
         <div
           key={comment.id}
+          id={`comment-${comment.id}`}
+          data-anon-number={comment.isAnonymous ? comment.anonNumber : undefined}
           className="rounded-lg border border-zinc-100 bg-white p-3 dark:border-zinc-800 dark:bg-zinc-900"
         >
           <div className="mb-1 flex items-center gap-2">
@@ -85,9 +88,7 @@ export default function CommentList({ comments }: { comments: SafeComment[] }) {
               [This comment has been removed]
             </p>
           ) : (
-            <p className="text-sm leading-relaxed text-zinc-700 dark:text-zinc-300">
-              {comment.body}
-            </p>
+            <MentionText text={comment.body} className="text-sm leading-relaxed text-zinc-700 dark:text-zinc-300" />
           )}
         </div>
       ))}

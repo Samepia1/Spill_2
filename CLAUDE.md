@@ -15,10 +15,12 @@ Anonymous college confessions platform. Students sign in with their .edu email, 
 ```
 src/
 ├── app/
-│   ├── layout.tsx              # Root layout — ThemeProvider, SettingsIcon, BottomNavWrapper
+│   ├── layout.tsx              # Root layout — ThemeProvider, TopBarIcons, BottomNavWrapper
 │   ├── page.tsx                # Feed page (trending/new/ending tabs, PostCard list)
 │   ├── globals.css             # Tailwind import + CSS vars + class-based dark mode (@custom-variant)
-│   ├── actions.ts              # Server actions: toggleLike
+│   ├── actions.ts              # Server actions: toggleLike (+ notification on like)
+│   ├── notifications/
+│   │   └── actions.ts          # Server actions: getNotifications, getUnreadCount, markNotificationRead, markAllNotificationsRead
 │   ├── report-actions.ts       # Server action: createReport (post/comment/user)
 │   ├── (auth)/                 # Auth route group (centered layout, no nav)
 │   │   ├── layout.tsx          # Centered card layout with "Spill" heading
@@ -36,8 +38,8 @@ src/
 │   │   ├── page.tsx            # Current user's profile (redirects to /profile/[handle])
 │   │   └── [handle]/page.tsx   # Public profile view (posts about this user, sort tabs)
 │   ├── post/[id]/
-│   │   ├── page.tsx            # Thread view (post + comments, identity choice, anon numbering)
-│   │   └── actions.ts          # Server action: createComment (with isAnonymous + identity lock)
+│   │   ├── page.tsx            # Thread view (post + comments, identity choice, anon numbering, scroll-to-comment)
+│   │   └── actions.ts          # Server action: createComment (with isAnonymous + identity lock + mention notifications)
 │   ├── settings/
 │   │   ├── page.tsx            # Settings page (theme toggle, sign out, profile link, X close button)
 │   │   └── actions.ts          # Server actions: signOut, updateAvatarUrl, getCurrentUserProfile, updatePhoneNumber
@@ -46,23 +48,28 @@ src/
 │       ├── actions.ts          # Server actions: removePost, removeComment, suspendUser, dismissReport
 │       └── report-card.tsx     # Report card component (expandable content, mod action buttons)
 ├── components/
-│   ├── bottom-nav.tsx          # Bottom tab bar (Feed, Search, Post, Profile + conditional Mod tab)
-│   ├── bottom-nav-wrapper.tsx  # Server component — fetches user role, passes isModerator to BottomNav
-│   ├── comment-composer.tsx    # Comment input with identity choice (anonymous/revealed, locked per thread)
+│   ├── bottom-nav.tsx          # Bottom tab bar (Feed, Search, Post, Profile + conditional Mod tab). Profile links to /profile/[handle] directly.
+│   ├── bottom-nav-wrapper.tsx  # Server component — fetches user role + handle, passes isModerator + userHandle to BottomNav
+│   ├── comment-composer.tsx    # Comment input with identity choice, @mention autocomplete, dual-state text management
+│   ├── mention-autocomplete.tsx # @mention autocomplete dropdown (thread participants + global user search)
+│   ├── mention-text.tsx        # Renders text with styled, clickable @mentions (blue for users, violet for anons)
+│   ├── scroll-to-comment.tsx   # Client component: scroll to comment from ?comment= URL param
 │   ├── avatar.tsx              # Reusable Avatar component (xs/sm/md/lg, anonymous silhouette, image, placeholder)
-│   ├── avatar-upload.tsx       # Avatar upload component (file picker, Supabase Storage upload, server action save)
+│   ├── avatar-upload.tsx       # Avatar upload component (file picker, client-side compression, Supabase Storage upload)
+│   ├── avatar-lightbox.tsx     # Clickable avatar fullscreen overlay (profile pages, Escape/backdrop to close)
 │   ├── media-picker.tsx        # Post media file picker (grid preview, upload progress, add/remove)
 │   ├── media-carousel.tsx      # Swipeable media carousel (scroll-snap, dot indicators, video play)
-│   ├── comment-list.tsx        # Comment list (Anon N or @handle, OP badge, report flags, avatars)
+│   ├── comment-list.tsx        # Comment list (Anon N or @handle, OP badge, report flags, avatars, mention rendering)
 │   ├── feed-tabs.tsx           # Trending/New/Ending tab selector (useTransition for pending state)
 │   ├── profile-sort-tabs.tsx   # Profile sort tabs (Top/Newest/Comments/Ending, useTransition)
 │   ├── post-card.tsx           # Post card: "[avatar] Anonymous → [avatar] @target" + like/comment/report
 │   ├── report-modal.tsx        # Reusable report modal (reason dropdown, details textarea)
-│   ├── settings-icon.tsx       # Persistent gear icon (fixed top-right, hidden on auth + settings routes)
+│   ├── top-bar-icons.tsx       # Bell icon (notifications dropdown) + gear icon (settings link), fixed top-right
 │   └── theme-provider.tsx      # ThemeProvider context + useTheme hook (light/dark/system, localStorage)
 ├── lib/
 │   ├── time.ts                 # formatRelativeTime, timeRemaining (nullable) helpers
 │   ├── phone.ts                # normalizePhone, formatPhoneDisplay, lastFour helpers
+│   ├── mentions.ts             # Mention parsing, display text conversion, anonMap builder, mention token helpers
 │   ├── compress-image.ts       # compressImage (avatar, square crop) + compressPostImage (preserve aspect ratio)
 │   ├── video-thumbnail.ts      # captureVideoThumbnail (canvas frame capture) + getVideoDimensions
 │   ├── current-user.ts         # getCurrentUser() — fetches auth user + public profile
@@ -94,7 +101,9 @@ supabase/
     ├── 016_users_phone_number.sql          # Add phone_number to users table
     ├── 017_placeholder_counters.sql        # Triggers for placeholder post_count and unique_poster_count
     ├── 018_search_rpc_placeholder.sql      # Update search RPC to include placeholder profiles
-    └── 019_post_media.sql                 # Post media table, storage bucket, nullable subject/body, media_count trigger
+    ├── 019_post_media.sql                 # Post media table, storage bucket, nullable subject/body, media_count trigger
+    ├── 020_notifications.sql              # Notifications table, indexes, RLS policies
+    └── 021_mention_notifications.sql      # Add comment_id to notifications for @mention scroll-to-comment
 ```
 
 ## Auth Flow (fully working)
@@ -123,6 +132,7 @@ supabase/
 - **likes**: post_id + user_id (unique)
 - **reports**: reporter_user_id, entity_type (`post`/`comment`/`user`), entity_id, reason, details, status (`open`/`reviewed`/`dismissed`)
 - **moderation_actions**: moderator_user_id, action_type, entity_type, entity_id, reason
+- **notifications**: id, university_id, recipient_id (FK users), actor_id (FK users), type (text — `new_post`/`new_comment`/`new_like`/`new_mention`/extensible), post_id (FK posts), comment_id (nullable FK comments — for scroll-to-comment), actor_handle (nullable — NULL if anonymous), post_subject (denormalized), is_read (bool, default false), created_at. RLS: users read/update own only. Insert requires actor_id = auth.uid().
 - All tables have RLS enabled. Users can only see data within their own university (via `current_user_university_id()` helper function).
 - Moderators/admins have UPDATE policies on reports, posts, comments, and users within their university.
 
@@ -167,13 +177,18 @@ supabase/
 15. **Button press feedback**: All interactive elements have `active:` Tailwind states (scale/opacity) for tap/click feedback. Global `-webkit-tap-highlight-color: transparent` suppresses browser defaults.
 16. **Loading skeletons**: `loading.tsx` files for feed, profile, thread, and mod pages show skeleton UI during navigation.
 17. **Fast tab switching**: Feed tabs and profile sort tabs use `useTransition` for instant pending state during server re-renders.
-18. **Post media**: Photos and short videos (up to 10 per post, 10MB images / 50MB videos / 30s max video). Client-side image compression via `compressPostImage`. Videos uploaded as-is with canvas-based thumbnail capture. Supabase Storage bucket `post-media`. Displayed in a CSS scroll-snap carousel with dot indicators. Subject/body become optional when media is attached. `moderation_status` column on `post_media` table prepared for future Google Vision API integration.
+18. **Post media**: Photos and short videos (up to 10 per post, 10MB images / 50MB videos / 30s max video). Client-side image compression via `compressPostImage`. Videos uploaded as-is with canvas-based thumbnail capture. Supabase Storage bucket `post-media`. Displayed in a CSS scroll-snap carousel with dot indicators and 400px max-height bounding box (vertical images letterboxed with black bars, horizontal images fill width). Subject/body become optional when media is attached. `moderation_status` column on `post_media` table prepared for future Google Vision API integration.
+19. **Direct profile navigation**: Bottom nav Profile tab links directly to `/profile/[handle]` instead of `/profile` (which used a server redirect). `BottomNavWrapper` fetches the user's handle alongside their role and passes it to `BottomNav`. Fixes a "Rendered more hooks than during the previous render" error caused by the intermediate redirect during client-side navigation.
+20. **Avatar compression**: Client-side image compression before upload. Accepts images up to 10MB, crops to center square, resizes to 800x800, outputs as JPEG at 0.8 quality (typically 100-250KB). Uses Canvas API via `compressImage()` in `src/lib/compress-image.ts`. Applied in both `avatar-upload.tsx` (settings/profile) and `onboarding/page.tsx`. Supabase bucket limit stays at 2MB since compressed output is always well under.
+21. **Fullscreen avatar viewer**: Clicking another user's avatar on their profile page opens a fullscreen lightbox overlay (`src/components/avatar-lightbox.tsx`). Shows 320px avatar on dark backdrop. Close via backdrop click, X button, or Escape key. Own profile still opens file picker (AvatarUpload). Placeholder profiles have no lightbox (no avatar).
+22. **Notifications system**: Bell icon next to settings gear (top-right) with slide-down dropdown. `notifications` table stores denormalized notification data (actor_handle, post_subject) to render without joins. Four notification types: `new_post` (someone posted about you), `new_comment` (someone commented on your post), `new_like` (someone liked your post), `new_mention` (someone @mentioned you). Anonymous actions show "Someone" instead of handle. Self-notifications skipped. Unread count badge on bell icon. Dropdown shows last 20 notifications with type icons, relative time, and blue unread dots. Click to mark read + navigate to post. "Mark all as read" button. Fire-and-forget inserts in `createPost`, `createComment`, and `toggleLike` server actions — notification failures never block the primary action. Extensible: adding a new type is just a new insert call + message template in `NotificationMessage`.
+23. **@Mention system**: Global mention engine for comments and post bodies. Typing `@` opens an autocomplete dropdown with thread participants (Anon 1, Anon 2, @handles) and global user search. Mentions stored as `@[label](type:id)` tokens in text, rendered as styled clickable elements (blue for user profiles, violet for anon scroll-to-comment). `@anonN` mentions are thread-local — resolved server-side via anonMap. Each mention generates a `new_mention` notification with `comment_id` for scroll-to-comment navigation. Multiple mentions per comment supported. Self-mentions silently ignored. Dual-state text management in composer: display text (clean `@label`) in textarea, raw text (with tokens) stored/submitted.
 
 ## Theme System
 - **Class-based dark mode**: Tailwind v4 `@custom-variant dark` in `globals.css` — activates `dark:` utilities via `.dark` class on `<html>`
 - **ThemeProvider** (`src/components/theme-provider.tsx`): React context storing user choice (`light`/`dark`/`system`) in localStorage
 - **FOUC prevention**: inline `<script>` in `layout.tsx` `<head>` reads localStorage and sets `.dark` class before paint
-- **Settings access**: gear icon (`src/components/settings-icon.tsx`) fixed top-right on all pages, hidden on auth routes and `/settings`
+- **Top bar icons**: bell icon (notifications dropdown) + gear icon (settings link) in `src/components/top-bar-icons.tsx`, fixed top-right, hidden on auth routes and `/settings`
 - **Settings page** (`/settings`): theme toggle (3 buttons), sign-out, profile link, fixed X close button (same position as gear icon) that navigates back via `router.back()`
 
 ## Search System
@@ -196,8 +211,18 @@ supabase/
 - **Profile fallback**: `/profile/[handle]` page first looks up `users`, then falls back to `placeholder_profiles` for unclaimed placeholders.
 - **Phone number never exposed publicly**: Only last 4 digits appear in the generated handle. `phone_number` column never selected in client-facing queries.
 
+## Notifications System
+- **Slide-down dropdown**: Bell icon in top-right bar (next to gear icon) opens a dropdown overlay. No separate page — data fetched on dropdown open via `getNotifications()` server action.
+- **Unread badge**: Red count badge on bell icon, fetched on mount via `getUnreadCount()`. Refreshes on pathname change.
+- **Notification types**: `new_post` (pen icon), `new_comment` (chat icon), `new_like` (heart icon), `new_mention` (@ icon). Extensible — add new types without migrations.
+- **Anonymity-aware**: `actor_handle` is NULL for anonymous actions. Dropdown shows "Someone" when NULL, `@handle` when revealed.
+- **Mark as read**: Click notification → marks read + navigates to `/post/[id]`. "Mark all as read" button in dropdown header.
+- **Fire-and-forget inserts**: Notification inserts in `createPost`, `createComment`, and `toggleLike` are wrapped in try/catch. Failures are silently ignored — never block the primary action.
+- **Self-notification prevention**: No notification sent when the actor is the same as the recipient (e.g., commenting on own post).
+- **Placeholder targets**: No notification sent for posts targeting placeholder profiles (no real user to notify).
+
 ## What's Next
-The spec document is at `Spill_Project_Description.txt`. Remaining features may include: notifications, user profile editing, admin panel, and further polish.
+The spec document is at `Spill_Project_Description.txt`. Remaining features may include: user profile editing, admin panel, and further polish.
 
 ## Commands
 ```bash
@@ -220,8 +245,9 @@ npm run lint   # ESLint
 - **Anonymous numbering**: built server-side in thread page, only anonymous participants get numbers, stripped from client via SafeComment type
 - **Client components needing server data**: use server actions called in useEffect (e.g., `getCurrentUserHandle` in create form)
 - **Avatar privacy**: anonymous posts/comments must never expose the real avatar. Two layers: (1) `Avatar` component ignores `src` when `isAnonymous=true`, (2) SafeComment sets `avatarUrl: null` when `is_anonymous=true` server-side
-- **Avatar uploads**: client-side upload to Supabase Storage at `{userId}/avatar.{ext}`, then server action saves public URL to `users.avatar_url`. Cache-busting `?t=timestamp` appended after upload.
+- **Avatar uploads**: client-side compression via `compressImage()` (800x800 JPEG), then upload to Supabase Storage at `{userId}/avatar.jpg`. Server action saves public URL to `users.avatar_url`. Cache-busting `?t=timestamp` appended after upload. Accepts up to 10MB input; compressed output always under 2MB.
 - **Supabase Storage bucket**: `avatars` (public, 2MB limit, JPEG/PNG/WebP only). RLS: users can upload/update/delete their own folder, public read.
+- **Notifications**: Denormalized `actor_handle` + `post_subject` on each notification row avoids joins at render time. `actor_handle` is NULL when the triggering action was anonymous. No CHECK constraint on `type` column — new notification types don't require a migration. Fire-and-forget inserts wrapped in try/catch in server actions.
 - **Dual-target posts**: Post queries must join on both `target:users!posts_target_user_id_fkey(...)` and `target_placeholder:placeholder_profiles!posts_target_placeholder_id_fkey(handle)`. Use `target?.handle ?? targetPlaceholder?.handle ?? "unknown"` to resolve the display handle.
 - **Phone normalization**: Always use `normalizePhone()` from `src/lib/phone.ts` before storing or comparing phone numbers. All phones stored in E.164 format.
 - **Placeholder XOR constraint**: When inserting posts, explicitly set the unused target to `null` (e.g., `target_user_id: null` for placeholder posts). The CHECK constraint requires exactly one non-null target.
@@ -230,3 +256,9 @@ npm run lint   # ESLint
 - **media_count on post INSERT**: Must pass `media_count` explicitly when inserting a post with media. The trigger on `post_media` fires after the media rows are inserted, but the `posts_content_required` CHECK constraint fires at post insert time.
 - **Nullable subject/body**: Posts with media can have null subject and/or body. PostCard conditionally renders them. Always use `subject || null` (not empty string) when inserting.
 - **Moderation hook**: `post_media.moderation_status` defaults to `'pending'`. Commented hook point in `createPost` server action marks where Google Vision API check should be added. Future implementation should update status to `'approved'` or `'rejected'` per media file.
+- **Profile navigation**: Bottom nav links directly to `/profile/[handle]` (not `/profile`). Avoids server redirect during client-side navigation, which caused React hook count mismatches in the App Router. The `/profile/page.tsx` redirect still exists as a fallback for direct URL access.
+- **Mention token format**: `@[label](type:id)` where type is `user` (handle) or `anon` (thread-local number). Regex: `/@\[([^\]]+)\]\((\w+):([^)]+)\)/g`. Parse with `parseMentions()` from `src/lib/mentions.ts`.
+- **Mention dual-state text**: Comment composer and create form maintain `displayBody` (shown in textarea) and `rawBody` (with tokens). `displayToRawIndex()` maps cursor positions between the two. On submit, `rawBody` is sent to server.
+- **Mention anon resolution**: Server-side `createComment` rebuilds the anonMap (via `buildAnonMap()`) to resolve `@anonN` mentions to real user IDs for notifications. Uses `invertAnonMap()` for number→userId lookup.
+- **Mention notifications**: `new_mention` type with `comment_id` column (nullable). Clicking navigates to `/post/{id}?comment={commentId}`. `ScrollToComment` component reads the param and scrolls.
+- **Anonymous numbering shared logic**: `buildAnonMap()` in `src/lib/mentions.ts` is used by both the thread page (render) and `createComment` (notification resolution). Same algorithm ensures consistency.

@@ -3,6 +3,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { normalizePhone } from "@/lib/phone";
 import { redirect } from "next/navigation";
+import { extractMentionedHandles } from "@/lib/mentions";
 
 export async function createPost(formData: FormData) {
   const targetHandle = formData.get("targetHandle") as string;
@@ -348,6 +349,34 @@ export async function createPost(formData: FormData) {
         actor_handle: isAnonymous ? null : profile.handle,
         post_subject: trimmedSubject || "(media post)",
       });
+    } catch {
+      // Fire-and-forget
+    }
+
+    // Send mention notifications for @handles in body (no anon mentions in posts)
+    try {
+      const mentionedHandles = extractMentionedHandles(trimmedBody);
+      if (mentionedHandles.length > 0) {
+        const { data: mentionedUsers } = await supabase
+          .from("users")
+          .select("id, handle")
+          .in("handle", mentionedHandles)
+          .eq("university_id", profile.university_id);
+
+        for (const u of mentionedUsers ?? []) {
+          // Skip self and target (target already gets new_post notification)
+          if (u.id === user.id || u.id === target.id) continue;
+          await supabase.from("notifications").insert({
+            university_id: profile.university_id,
+            recipient_id: u.id,
+            actor_id: user.id,
+            type: "new_mention",
+            post_id: newPost.id,
+            actor_handle: isAnonymous ? null : profile.handle,
+            post_subject: trimmedSubject || "(media post)",
+          });
+        }
+      }
     } catch {
       // Fire-and-forget
     }

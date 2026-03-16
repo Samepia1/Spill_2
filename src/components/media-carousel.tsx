@@ -34,10 +34,17 @@ function PlayButton() {
 
 function VideoSlide({
   item,
+  isActive,
 }: {
   item: MediaItem;
+  isActive: boolean;
 }) {
   const [playing, setPlaying] = useState(false);
+
+  // Stop video when swiped away
+  useEffect(() => {
+    if (!isActive) setPlaying(false);
+  }, [isActive]);
 
   if (playing) {
     return (
@@ -141,7 +148,7 @@ export default function MediaCarousel({ items }: MediaCarouselProps) {
                 className="max-h-[400px] w-full object-contain"
               />
             ) : (
-              <VideoSlide item={item} />
+              <VideoSlide item={item} isActive={i === activeIndex} />
             )}
           </div>
         ))}
