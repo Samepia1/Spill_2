@@ -18,7 +18,7 @@ src/
 │   ├── layout.tsx              # Root layout — ThemeProvider, TopBarIcons, BottomNavWrapper
 │   ├── page.tsx                # Feed page (trending/new/ending tabs, PostCard list)
 │   ├── globals.css             # Tailwind import + CSS vars + class-based dark mode (@custom-variant)
-│   ├── actions.ts              # Server actions: toggleLike (+ notification on like)
+│   ├── actions.ts              # Server actions: toggleLike (+ notification on like), searchMentionUsers (@mention autocomplete)
 │   ├── notifications/
 │   │   └── actions.ts          # Server actions: getNotifications, getUnreadCount, markNotificationRead, markAllNotificationsRead
 │   ├── report-actions.ts       # Server action: createReport (post/comment/user)
@@ -29,8 +29,8 @@ src/
 │   │   ├── verify/page.tsx     # 6-digit OTP input → verify → redirect to /onboarding or /
 │   │   └── onboarding/page.tsx # Handle + display name → create public.users row
 │   ├── create/
-│   │   ├── page.tsx            # Post creation form (target picker, subject, body, media picker, anonymous toggle, expiration toggle)
-│   │   └── actions.ts          # Server actions: createPost, getCurrentUserHandle, getCurrentUserId, searchTargetUsers, checkPhoneNumber
+│   │   ├── page.tsx            # Post creation form (target picker, subject, body, media picker, anonymous toggle, expiration toggle, @mention in body)
+│   │   └── actions.ts          # Server actions: createPost (+ mention notifications), getCurrentUserHandle, getCurrentUserId, searchTargetUsers, checkPhoneNumber
 │   ├── search/
 │   │   ├── page.tsx            # Search users page (activity-ranked, infinite scroll)
 │   │   └── actions.ts          # Server action: searchUsersRanked (RPC, paginated)
@@ -220,6 +220,19 @@ supabase/
 - **Fire-and-forget inserts**: Notification inserts in `createPost`, `createComment`, and `toggleLike` are wrapped in try/catch. Failures are silently ignored — never block the primary action.
 - **Self-notification prevention**: No notification sent when the actor is the same as the recipient (e.g., commenting on own post).
 - **Placeholder targets**: No notification sent for posts targeting placeholder profiles (no real user to notify).
+
+## @Mention System
+- **Autocomplete dropdown**: Typing `@` in a comment or post body opens a dropdown. In comments: "In this thread" section (Anon N, @handles of participants) + "All users" section (debounced global search via `searchMentionUsers`). In post body: global search only (no thread context).
+- **Token format**: Mentions stored as `@[label](type:id)` in text. User mentions: `@[samuel](user:samuel)`. Anon mentions: `@[Anon 2](anon:2)`. Regex: `/@\[([^\]]+)\]\((\w+):([^)]+)\)/g`.
+- **Dual-state text**: Comment composer and create form maintain two parallel strings: `displayBody` (what the textarea shows, e.g., `@Anon 2`) and `rawBody` (what gets stored, e.g., `@[Anon 2](anon:2)`). `displayToRawIndex()` maps cursor positions between them.
+- **Styled rendering**: `MentionText` component parses raw text and renders mentions as clickable elements. User mentions: blue `<Link>` to `/profile/[handle]`. Anon mentions: violet `<button>` that scrolls to the anon's first comment via `data-anon-number` attribute.
+- **Thread-local anon numbers**: `@anonN` mentions are only meaningful within the thread where they were created. The anon number maps to a specific anonymous user in that thread only.
+- **Notification on mention**: Each `@mention` creates a `new_mention` notification (@ icon) for the mentioned user. `comment_id` stored on the notification for scroll-to-comment. Clicking navigates to `/post/{id}?comment={commentId}`.
+- **Anon resolution**: Server-side `createComment` rebuilds the anonMap (via `buildAnonMap()` + `invertAnonMap()` from `src/lib/mentions.ts`) to resolve `@anonN` to real user IDs for notifications.
+- **Label convention**: Labels never include `@` prefix — the `@` is added only at display time (dropdown UI, textarea insertion, MentionText render). This prevents `@@handle` double-prefix bugs.
+- **Multiple mentions**: A single comment/post can mention multiple people. Each gets a separate notification. Self-mentions silently ignored.
+- **Scroll-to-comment**: `ScrollToComment` client component reads `?comment=` URL param and scrolls the target comment into view. Comment list elements have `id="comment-{id}"` and `data-anon-number={N}` attributes.
+- **Shared anonMap logic**: `buildAnonMap()` in `src/lib/mentions.ts` extracted from the thread page's anonymous numbering logic. Used by both thread page (render) and `createComment` (notification resolution) to ensure consistency.
 
 ## What's Next
 The spec document is at `Spill_Project_Description.txt`. Remaining features may include: user profile editing, admin panel, and further polish.
