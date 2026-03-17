@@ -1,11 +1,13 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
+import { randomUUID } from "crypto";
+import { createServiceClient } from "@/lib/supabase/service";
 import { Resend } from "resend";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 type NotificationType = "new_post" | "new_comment" | "new_mention";
 
 const COOLDOWN_MS = 2 * 60 * 1000;
 const FROM_EMAIL =
-  process.env.RESEND_FROM_EMAIL ?? "Spill <noreply@spill.com>";
+  process.env.RESEND_FROM_EMAIL ?? "Unispill <noreply@unispill.com>";
 const BASE_URL =
   process.env.NEXT_PUBLIC_BASE_URL ?? "http://localhost:3000";
 
@@ -177,8 +179,8 @@ async function shouldSendEmail(
   actorHandle: string | null,
   supabase: SupabaseClient
 ): Promise<
-  | { send: false }
-  | { send: true; email: string; unsubscribeToken: string }
+  | { send: false; reason: string }
+  | { send: true; email: string; unsubscribeToken: string; enabledTypes: string[] }
 > {
   const { data: user } = await supabase
     .from("users")
@@ -190,38 +192,47 @@ async function shouldSendEmail(
 
   if (!user) {
     console.error("[email] shouldSendEmail: user not found for", recipientId);
-    return { send: false };
+    return { send: false, reason: "user_not_found" };
   }
   if (user.status !== "active") {
     console.error("[email] shouldSendEmail: user status is", user.status);
-    return { send: false };
+    return { send: false, reason: "user_inactive" };
   }
 
   if (notificationType === "new_post" && !user.email_notify_posts) {
-    return { send: false };
+    return { send: false, reason: "posts_email_disabled" };
   }
 
   if (notificationType === "new_comment") {
-    if (!user.email_notify_comments || actorHandle === null) {
-      return { send: false };
+    if (!user.email_notify_comments) {
+      return { send: false, reason: "comments_email_disabled" };
+    }
+    if (actorHandle === null) {
+      return { send: false, reason: "anonymous_comment" };
     }
   }
 
   if (notificationType === "new_mention" && !user.email_notify_mentions) {
-    return { send: false };
+    return { send: false, reason: "mentions_email_disabled" };
   }
 
   if (user.last_email_sent_at) {
     const lastSent = new Date(user.last_email_sent_at).getTime();
     if (Date.now() - lastSent < COOLDOWN_MS) {
-      return { send: false };
+      return { send: false, reason: "cooldown_active" };
     }
   }
+
+  const enabledTypes: string[] = [];
+  if (user.email_notify_posts) enabledTypes.push("new_post");
+  if (user.email_notify_comments) enabledTypes.push("new_comment");
+  if (user.email_notify_mentions) enabledTypes.push("new_mention");
 
   return {
     send: true,
     email: user.email as string,
     unsubscribeToken: user.email_unsubscribe_token as string,
+    enabledTypes,
   };
 }
 
@@ -229,11 +240,11 @@ export async function sendNotificationEmail(
   recipientId: string,
   triggerType: NotificationType,
   postId: string,
-  actorHandle: string | null,
-  supabase: SupabaseClient
+  actorHandle: string | null
 ): Promise<void> {
   try {
     console.log("[email] sendNotificationEmail called:", { recipientId, triggerType, postId, actorHandle });
+    const supabase = createServiceClient();
     const check = await shouldSendEmail(
       recipientId,
       triggerType,
@@ -241,12 +252,12 @@ export async function sendNotificationEmail(
       supabase
     );
     if (!check.send) {
-      console.log("[email] shouldSendEmail returned false, skipping");
+      console.log("[email] Skipped:", check.reason, { recipientId, triggerType });
       return;
     }
     console.log("[email] sending email to:", check.email);
 
-    const { email, unsubscribeToken } = check;
+    const { email, unsubscribeToken, enabledTypes } = check;
     const unsubscribeUrl = `${BASE_URL}/api/unsubscribe?token=${unsubscribeToken}`;
 
     const { data: notifications } = await supabase
@@ -254,6 +265,7 @@ export async function sendNotificationEmail(
       .select("type, actor_handle, post_subject, post_id, created_at")
       .eq("recipient_id", recipientId)
       .eq("is_read", false)
+      .in("type", enabledTypes)
       .order("created_at", { ascending: false })
       .limit(10);
 
@@ -277,17 +289,25 @@ export async function sendNotificationEmail(
 
     const resend = getResend();
     const plainText = buildPlainText(unread, triggerType, actorHandle, postId, unsubscribeUrl);
-    await resend.emails.send({
+    const { data: sendResult, error: sendError } = await resend.emails.send({
       from: FROM_EMAIL,
       to: email,
+      replyTo: "noreply@unispill.com",
       subject,
       html,
       text: plainText,
       headers: {
         "List-Unsubscribe": `<${unsubscribeUrl}>`,
         "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+        "X-Entity-Ref-ID": randomUUID(),
       },
     });
+
+    if (sendError) {
+      console.error("[email] Resend API error:", JSON.stringify(sendError));
+      return;
+    }
+    console.log("[email] Sent successfully, ID:", sendResult?.id);
 
     await supabase
       .from("users")

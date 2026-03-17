@@ -350,7 +350,7 @@ export async function createPost(formData: FormData) {
         actor_handle: isAnonymous ? null : profile.handle,
         post_subject: trimmedSubject || "(media post)",
       });
-      sendNotificationEmail(target.id, "new_post", newPost.id, isAnonymous ? null : profile.handle, supabase).catch(() => {});
+      sendNotificationEmail(target.id, "new_post", newPost.id, isAnonymous ? null : profile.handle).catch(() => {});
     } catch {
       // Fire-and-forget
     }
@@ -377,7 +377,7 @@ export async function createPost(formData: FormData) {
             actor_handle: isAnonymous ? null : profile.handle,
             post_subject: trimmedSubject || "(media post)",
           });
-          sendNotificationEmail(u.id, "new_mention", newPost.id, isAnonymous ? null : profile.handle, supabase).catch(() => {});
+          sendNotificationEmail(u.id, "new_mention", newPost.id, isAnonymous ? null : profile.handle).catch(() => {});
         }
       }
     } catch {
