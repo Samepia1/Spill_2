@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { normalizePhone } from "@/lib/phone";
 import { redirect } from "next/navigation";
 import { extractMentionedHandles } from "@/lib/mentions";
+import { sendNotificationEmail } from "@/lib/email";
 
 export async function createPost(formData: FormData) {
   const targetHandle = formData.get("targetHandle") as string;
@@ -349,6 +350,7 @@ export async function createPost(formData: FormData) {
         actor_handle: isAnonymous ? null : profile.handle,
         post_subject: trimmedSubject || "(media post)",
       });
+      sendNotificationEmail(target.id, "new_post", newPost.id, isAnonymous ? null : profile.handle, supabase).catch(() => {});
     } catch {
       // Fire-and-forget
     }
@@ -375,6 +377,7 @@ export async function createPost(formData: FormData) {
             actor_handle: isAnonymous ? null : profile.handle,
             post_subject: trimmedSubject || "(media post)",
           });
+          sendNotificationEmail(u.id, "new_mention", newPost.id, isAnonymous ? null : profile.handle, supabase).catch(() => {});
         }
       }
     } catch {

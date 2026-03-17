@@ -4,7 +4,7 @@ import { useState, useEffect, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useTheme } from "@/components/theme-provider";
-import { signOut, getCurrentUserProfile, updatePhoneNumber } from "./actions";
+import { signOut, getCurrentUserProfile, updatePhoneNumber, updateEmailPreferences } from "./actions";
 import Avatar from "@/components/avatar";
 import AvatarUpload from "@/components/avatar-upload";
 import { formatPhoneDisplay } from "@/lib/phone";
@@ -24,6 +24,9 @@ export default function SettingsPage() {
     handle: string;
     avatar_url: string | null;
     phone_number: string | null;
+    email_notify_posts: boolean;
+    email_notify_comments: boolean;
+    email_notify_mentions: boolean;
   } | null>(null);
   const [phoneNumber, setPhoneNumber] = useState("");
   const [phoneSaving, setPhoneSaving] = useState(false);
@@ -163,6 +166,50 @@ export default function SettingsPage() {
               {phoneMessage.text}
             </p>
           )}
+        </div>
+      </section>
+
+      {/* Email Notifications */}
+      <section className="mb-6">
+        <h2 className="mb-3 text-sm font-medium text-zinc-500 dark:text-zinc-400">
+          Email Notifications
+        </h2>
+        <div className="rounded-xl border border-zinc-100 bg-white dark:border-zinc-800 dark:bg-zinc-900">
+          {[
+            { key: "posts" as const, label: "Posts about you", field: "email_notify_posts" as const },
+            { key: "comments" as const, label: "Comments on your posts", field: "email_notify_comments" as const },
+            { key: "mentions" as const, label: "@Mentions", field: "email_notify_mentions" as const },
+          ].map((item, idx) => (
+            <div
+              key={item.key}
+              className={`flex items-center justify-between px-4 py-3 ${
+                idx > 0 ? "border-t border-zinc-100 dark:border-zinc-800" : ""
+              }`}
+            >
+              <span className="text-sm text-zinc-700 dark:text-zinc-300">
+                {item.label}
+              </span>
+              <button
+                onClick={async () => {
+                  if (!profile) return;
+                  const newVal = !profile[item.field];
+                  setProfile({ ...profile, [item.field]: newVal });
+                  await updateEmailPreferences({ [item.key]: newVal });
+                }}
+                className={`relative h-6 w-11 rounded-full transition-colors duration-200 ${
+                  profile?.[item.field]
+                    ? "bg-zinc-900 dark:bg-zinc-100"
+                    : "bg-zinc-300 dark:bg-zinc-600"
+                }`}
+              >
+                <span
+                  className={`absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform duration-200 dark:bg-zinc-900 ${
+                    profile?.[item.field] ? "translate-x-5" : "translate-x-0"
+                  }`}
+                />
+              </button>
+            </div>
+          ))}
         </div>
       </section>
 

@@ -41,8 +41,12 @@ src/
 │   │   ├── page.tsx            # Thread view (post + comments, identity choice, anon numbering, scroll-to-comment)
 │   │   └── actions.ts          # Server action: createComment (with isAnonymous + identity lock + mention notifications)
 │   ├── settings/
-│   │   ├── page.tsx            # Settings page (theme toggle, sign out, profile link, X close button)
-│   │   └── actions.ts          # Server actions: signOut, updateAvatarUrl, getCurrentUserProfile, updatePhoneNumber
+│   │   ├── page.tsx            # Settings page (theme toggle, email notification toggles, sign out, profile link, X close button)
+│   │   └── actions.ts          # Server actions: signOut, updateAvatarUrl, getCurrentUserProfile, updatePhoneNumber, updateEmailPreferences
+│   ├── api/
+│   │   └── unsubscribe/route.ts # GET handler: token-based email unsubscribe (service role client)
+│   ├── unsubscribe/
+│   │   └── page.tsx            # Unsubscribe confirmation page
 │   └── mod/
 │       ├── page.tsx            # Moderation queue (Open/Reviewed/Dismissed tabs)
 │       ├── actions.ts          # Server actions: removePost, removeComment, suspendUser, dismissReport
@@ -73,9 +77,11 @@ src/
 │   ├── compress-image.ts       # compressImage (avatar, square crop) + compressPostImage (preserve aspect ratio)
 │   ├── video-thumbnail.ts      # captureVideoThumbnail (canvas frame capture) + getVideoDimensions
 │   ├── current-user.ts         # getCurrentUser() — fetches auth user + public profile
+│   ├── email.ts                # Email notification utility (Resend client, cooldown, HTML templates, sendNotificationEmail)
 │   └── supabase/
 │       ├── client.ts           # Browser Supabase client (createBrowserClient)
 │       ├── server.ts           # Server Supabase client (createServerClient with cookies)
+│       ├── service.ts          # Service-role Supabase client (bypasses RLS, for unsubscribe route)
 │       └── middleware.ts       # Supabase client for proxy context (cookie read/write on req/res)
 ├── hooks/
 │   └── use-media-upload.ts     # Multi-file upload hook (validation, compression, Supabase Storage upload)
@@ -103,7 +109,8 @@ supabase/
     ├── 018_search_rpc_placeholder.sql      # Update search RPC to include placeholder profiles
     ├── 019_post_media.sql                 # Post media table, storage bucket, nullable subject/body, media_count trigger
     ├── 020_notifications.sql              # Notifications table, indexes, RLS policies
-    └── 021_mention_notifications.sql      # Add comment_id to notifications for @mention scroll-to-comment
+    ├── 021_mention_notifications.sql      # Add comment_id to notifications for @mention scroll-to-comment
+    └── 022_email_preferences.sql          # Email notification preferences, cooldown timestamp, unsubscribe token on users
 ```
 
 ## Auth Flow (fully working)
@@ -183,6 +190,7 @@ supabase/
 21. **Fullscreen avatar viewer**: Clicking another user's avatar on their profile page opens a fullscreen lightbox overlay (`src/components/avatar-lightbox.tsx`). Shows 320px avatar on dark backdrop. Close via backdrop click, X button, or Escape key. Own profile still opens file picker (AvatarUpload). Placeholder profiles have no lightbox (no avatar).
 22. **Notifications system**: Bell icon next to settings gear (top-right) with slide-down dropdown. `notifications` table stores denormalized notification data (actor_handle, post_subject) to render without joins. Four notification types: `new_post` (someone posted about you), `new_comment` (someone commented on your post), `new_like` (someone liked your post), `new_mention` (someone @mentioned you). Anonymous actions show "Someone" instead of handle. Self-notifications skipped. Unread count badge on bell icon. Dropdown shows last 20 notifications with type icons, relative time, and blue unread dots. Click to mark read + navigate to post. "Mark all as read" button. Fire-and-forget inserts in `createPost`, `createComment`, and `toggleLike` server actions — notification failures never block the primary action. Extensible: adding a new type is just a new insert call + message template in `NotificationMessage`.
 23. **@Mention system**: Global mention engine for comments and post bodies. Typing `@` opens an autocomplete dropdown with thread participants (Anon 1, Anon 2, @handles) and global user search. Mentions stored as `@[label](type:id)` tokens in text, rendered as styled clickable elements (blue for user profiles, violet for anon scroll-to-comment). `@anonN` mentions are thread-local — resolved server-side via anonMap. Each mention generates a `new_mention` notification with `comment_id` for scroll-to-comment navigation. Multiple mentions per comment supported. Self-mentions silently ignored. Dual-state text management in composer: display text (clean `@label`) in textarea, raw text (with tokens) stored/submitted.
+24. **Email notifications**: Resend-powered email notifications for three event types: `new_post`, `new_comment` (revealed identity only), `new_mention`. 2-hour per-user cooldown — if multiple events happen during cooldown, next email sends a digest of all unread notifications. Per-type toggles in settings (posts, comments, mentions). Token-based unsubscribe via `/api/unsubscribe`. Teaser-only emails (no post content) with branded HTML template. Fire-and-forget sends in server actions via `sendNotificationEmail()` from `src/lib/email.ts`. Env vars: `RESEND_API_KEY`, `RESEND_FROM_EMAIL`, `NEXT_PUBLIC_BASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`.
 
 ## Theme System
 - **Class-based dark mode**: Tailwind v4 `@custom-variant dark` in `globals.css` — activates `dark:` utilities via `.dark` class on `<html>`
@@ -248,6 +256,7 @@ npm run lint   # ESLint
 - **Local**: Supabase credentials in `.env.local` (not committed)
 - **Vercel**: Same env vars set in Vercel dashboard
 - Required vars: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+- Email notifications: `RESEND_API_KEY`, `RESEND_FROM_EMAIL`, `NEXT_PUBLIC_BASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`
 - Optional (for future use): `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN`
 
 ## Key Patterns & Gotchas
@@ -276,3 +285,4 @@ npm run lint   # ESLint
 - **Mention anon resolution**: Server-side `createComment` rebuilds the anonMap (via `buildAnonMap()`) to resolve `@anonN` mentions to real user IDs for notifications. Uses `invertAnonMap()` for number→userId lookup.
 - **Mention notifications**: `new_mention` type with `comment_id` column (nullable). Clicking navigates to `/post/{id}?comment={commentId}`. `ScrollToComment` component reads the param and scrolls.
 - **Anonymous numbering shared logic**: `buildAnonMap()` in `src/lib/mentions.ts` is used by both the thread page (render) and `createComment` (notification resolution). Same algorithm ensures consistency.
+- **Email notifications**: Fire-and-forget `sendNotificationEmail()` calls in server actions, same pattern as in-app notifications. Resend client lazily initialized to avoid build errors when env var is missing. 2-hour cooldown tracked via `last_email_sent_at` on users table. Anonymous comments skip email (`actorHandle === null` check). Digest emails batch unread notifications when cooldown has passed. Unsubscribe route at `/api/unsubscribe` uses service-role Supabase client to bypass RLS. Unsubscribe + settings routes added to `publicRoutes` in proxy.ts.

@@ -2,6 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
+import { sendNotificationEmail } from "@/lib/email";
 import {
   extractMentionedHandles,
   extractMentionedAnonNumbers,
@@ -122,6 +123,10 @@ export async function createComment(postId: string, body: string, isAnonymous: b
         actor_handle: isAnonymous ? null : profile.handle,
         post_subject: post.subject || "(media post)",
       });
+      // Only email for revealed comments (not anonymous)
+      if (!isAnonymous) {
+        sendNotificationEmail(post.author_user_id, "new_comment", postId, profile.handle, supabase).catch(() => {});
+      }
     } catch {
       // Fire-and-forget
     }
@@ -186,6 +191,7 @@ export async function createComment(postId: string, body: string, isAnonymous: b
           actor_handle: isAnonymous ? null : profile.handle,
           post_subject: post.subject || "(media post)",
         });
+        sendNotificationEmail(recipientId, "new_mention", postId, isAnonymous ? null : profile.handle, supabase).catch(() => {});
       }
     }
   } catch {

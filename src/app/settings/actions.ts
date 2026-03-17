@@ -35,7 +35,7 @@ export async function getCurrentUserProfile() {
 
   const { data } = await supabase
     .from("users")
-    .select("id, handle, avatar_url, phone_number")
+    .select("id, handle, avatar_url, phone_number, email_notify_posts, email_notify_comments, email_notify_mentions")
     .eq("id", user.id)
     .single();
 
@@ -83,4 +83,29 @@ export async function updatePhoneNumber(
   );
 
   return { success: true, mergedCount: mergedCount ?? 0 };
+}
+
+export async function updateEmailPreferences(prefs: {
+  posts?: boolean;
+  comments?: boolean;
+  mentions?: boolean;
+}) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "Not authenticated" };
+
+  const updates: Record<string, boolean> = {};
+  if (prefs.posts !== undefined) updates.email_notify_posts = prefs.posts;
+  if (prefs.comments !== undefined) updates.email_notify_comments = prefs.comments;
+  if (prefs.mentions !== undefined) updates.email_notify_mentions = prefs.mentions;
+
+  const { error } = await supabase
+    .from("users")
+    .update(updates)
+    .eq("id", user.id);
+
+  if (error) return { error: error.message };
+  return { success: true };
 }
