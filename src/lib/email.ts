@@ -3,7 +3,7 @@ import { Resend } from "resend";
 
 type NotificationType = "new_post" | "new_comment" | "new_mention";
 
-const COOLDOWN_MS = 2 * 60 * 60 * 1000;
+const COOLDOWN_MS = 2 * 60 * 1000;
 const FROM_EMAIL =
   process.env.RESEND_FROM_EMAIL ?? "Spill <noreply@spill.com>";
 const BASE_URL =

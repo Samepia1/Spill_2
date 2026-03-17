@@ -74,7 +74,7 @@ export async function createPost(formData: FormData) {
     return { error: "Post must have text or media" };
   }
 
-  // 6. Check daily rate limit (3 posts per 24 hours)
+  // 6. Check daily rate limit (20 posts per 24 hours)
   const twentyFourHoursAgo = new Date(
     Date.now() - 24 * 60 * 60 * 1000
   ).toISOString();
@@ -85,8 +85,8 @@ export async function createPost(formData: FormData) {
     .eq("author_user_id", user.id)
     .gte("created_at", twentyFourHoursAgo);
 
-  if (count !== null && count >= 3) {
-    return { error: "You can only create 3 posts per day" };
+  if (count !== null && count >= 20) {
+    return { error: "You can only create 20 posts per day" };
   }
 
   // 7. Calculate optional expiry
@@ -183,9 +183,9 @@ export async function createPost(formData: FormData) {
       }
     }
 
-    // 30-minute cooldown per author-placeholder pair
-    const thirtyMinutesAgo = new Date(
-      Date.now() - 30 * 60 * 1000
+    // 2-minute cooldown per author-placeholder pair
+    const twoMinutesAgo = new Date(
+      Date.now() - 2 * 60 * 1000
     ).toISOString();
 
     const { data: recentPlaceholderPost } = await supabase
@@ -193,13 +193,13 @@ export async function createPost(formData: FormData) {
       .select("id")
       .eq("author_user_id", user.id)
       .eq("target_placeholder_id", placeholderId)
-      .gte("created_at", thirtyMinutesAgo)
+      .gte("created_at", twoMinutesAgo)
       .limit(1)
       .maybeSingle();
 
     if (recentPlaceholderPost) {
       return {
-        error: "You can only post about this person once every 30 minutes",
+        error: "You can only post about this person once every 2 minutes",
       };
     }
 
@@ -275,9 +275,9 @@ export async function createPost(formData: FormData) {
     return { error: "You can't create a post about yourself" };
   }
 
-  // 13. Check for recent post about this target (30-minute cooldown per author-target pair)
-  const thirtyMinutesAgo = new Date(
-    Date.now() - 30 * 60 * 1000
+  // 13. Check for recent post about this target (2-minute cooldown per author-target pair)
+  const twoMinutesAgo = new Date(
+    Date.now() - 2 * 60 * 1000
   ).toISOString();
 
   const { data: recentPost } = await supabase
@@ -285,13 +285,13 @@ export async function createPost(formData: FormData) {
     .select("id")
     .eq("author_user_id", user.id)
     .eq("target_user_id", target.id)
-    .gte("created_at", thirtyMinutesAgo)
+    .gte("created_at", twoMinutesAgo)
     .limit(1)
     .maybeSingle();
 
   if (recentPost) {
     return {
-      error: "You can only post about this person once every 30 minutes",
+      error: "You can only post about this person once every 2 minutes",
     };
   }
 
