@@ -154,6 +154,23 @@ function buildDigestEmailHtml(
 </html>`;
 }
 
+function buildPlainText(
+  unread: Array<{ type: string; actor_handle: string | null }>,
+  triggerType: NotificationType,
+  actorHandle: string | null,
+  postId: string,
+  unsubscribeUrl: string
+): string {
+  if (unread.length <= 1) {
+    const msg = getNotificationMessage(triggerType, actorHandle);
+    return `${msg}\n\nView on Spill: ${BASE_URL}/post/${postId}\n\nYou're receiving this because you have an account on Spill. If you'd like to stop receiving these emails, visit: ${unsubscribeUrl}`;
+  }
+  const items = unread
+    .map((n) => `- ${getNotificationMessage(n.type, n.actor_handle)}`)
+    .join("\n");
+  return `Here's what you missed:\n\n${items}\n\nOpen Spill: ${BASE_URL}\n\nYou're receiving this because you have an account on Spill. If you'd like to stop receiving these emails, visit: ${unsubscribeUrl}`;
+}
+
 async function shouldSendEmail(
   recipientId: string,
   notificationType: NotificationType,
@@ -171,7 +188,12 @@ async function shouldSendEmail(
     .eq("id", recipientId)
     .single();
 
-  if (!user || user.status !== "active") {
+  if (!user) {
+    console.error("[email] shouldSendEmail: user not found for", recipientId);
+    return { send: false };
+  }
+  if (user.status !== "active") {
+    console.error("[email] shouldSendEmail: user status is", user.status);
     return { send: false };
   }
 
@@ -211,13 +233,18 @@ export async function sendNotificationEmail(
   supabase: SupabaseClient
 ): Promise<void> {
   try {
+    console.log("[email] sendNotificationEmail called:", { recipientId, triggerType, postId, actorHandle });
     const check = await shouldSendEmail(
       recipientId,
       triggerType,
       actorHandle,
       supabase
     );
-    if (!check.send) return;
+    if (!check.send) {
+      console.log("[email] shouldSendEmail returned false, skipping");
+      return;
+    }
+    console.log("[email] sending email to:", check.email);
 
     const { email, unsubscribeToken } = check;
     const unsubscribeUrl = `${BASE_URL}/api/unsubscribe?token=${unsubscribeToken}`;
@@ -249,18 +276,25 @@ export async function sendNotificationEmail(
     }
 
     const resend = getResend();
+    const plainText = buildPlainText(unread, triggerType, actorHandle, postId, unsubscribeUrl);
     await resend.emails.send({
       from: FROM_EMAIL,
       to: email,
       subject,
       html,
+      text: plainText,
+      headers: {
+        "List-Unsubscribe": `<${unsubscribeUrl}>`,
+        "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+      },
     });
 
     await supabase
       .from("users")
       .update({ last_email_sent_at: new Date().toISOString() })
       .eq("id", recipientId);
-  } catch {
+  } catch (err) {
+    console.error("[email] sendNotificationEmail failed:", err);
     return;
   }
 }
