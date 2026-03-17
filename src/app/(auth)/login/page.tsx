@@ -12,7 +12,7 @@ export default function LoginPage() {
     setLoading(true);
 
     const email = formData.get("email") as string;
-    const TEST_EMAILS = ["samvelkerobyan1234567890@gmail.com"];
+    const TEST_EMAILS = ["samvelkerobyan1234567890@gmail.com", "samvelkerobyan123@gmail.com"];
     if (!email || (!email.endsWith(".edu") && !TEST_EMAILS.includes(email.toLowerCase()))) {
       setError("Please enter a valid .edu email address.");
       setLoading(false);
