@@ -26,8 +26,8 @@ export type MediaFile = {
 
 const MAX_FILES = 10;
 const MAX_IMAGE_SIZE = 10 * 1024 * 1024; // 10MB
-const MAX_VIDEO_SIZE = 50 * 1024 * 1024; // 50MB
-const MAX_VIDEO_DURATION = 30; // seconds
+const MAX_VIDEO_SIZE = 150 * 1024 * 1024; // 150MB
+const MAX_VIDEO_DURATION = 60; // seconds
 const ALLOWED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"];
 const ALLOWED_VIDEO_TYPES = ["video/mp4", "video/quicktime", "video/webm"];
 
@@ -98,7 +98,7 @@ export function useMediaUpload(userId: string, tempPostId: string) {
           if (dims && dims.duration > MAX_VIDEO_DURATION) {
             updateFile(mediaFile.id, {
               status: "error",
-              error: "Video must be under 30 seconds",
+              error: "Video must be under 60 seconds",
             });
             return;
           }
@@ -209,7 +209,7 @@ export function useMediaUpload(userId: string, tempPostId: string) {
         }
 
         if (fileType === "video" && file.size > MAX_VIDEO_SIZE) {
-          setError("Video must be under 50MB");
+          setError("Video must be under 150MB");
           return;
         }
 
