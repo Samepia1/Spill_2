@@ -7,6 +7,7 @@ export type UserProfile = {
   handle: string;
   display_name: string | null;
   avatar_url: string | null;
+  phone_number: string | null;
   role: string;
   status: string;
 };
@@ -25,7 +26,7 @@ export async function getCurrentUser(): Promise<{
 
   const { data: profile } = await supabase
     .from("users")
-    .select("id, university_id, email, handle, display_name, avatar_url, role, status")
+    .select("id, university_id, email, handle, display_name, avatar_url, phone_number, role, status")
     .eq("id", user.id)
     .single();
 

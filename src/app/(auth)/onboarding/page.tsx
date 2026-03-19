@@ -12,6 +12,7 @@ export default function OnboardingPage() {
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [userId, setUserId] = useState<string | null>(null);
+  const [referrerId, setReferrerId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -19,6 +20,12 @@ export default function OnboardingPage() {
     supabase.auth.getUser().then(({ data: { user } }) => {
       if (user) setUserId(user.id);
     });
+    // Read and clear referrer from localStorage (set by /invite page)
+    const ref = localStorage.getItem("spill_referrer");
+    if (ref) {
+      setReferrerId(ref);
+      localStorage.removeItem("spill_referrer");
+    }
   }, []);
 
   async function handleAvatarChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -97,6 +104,7 @@ export default function OnboardingPage() {
       </p>
 
       <form action={handleSubmit}>
+        {referrerId && <input type="hidden" name="referrer_id" value={referrerId} />}
         {/* Avatar upload */}
         <div className="mb-5 flex flex-col items-center">
           <button
@@ -187,7 +195,7 @@ export default function OnboardingPage() {
           className="mb-4 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 placeholder-zinc-400 focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-50 dark:placeholder-zinc-500"
         />
         <p className="mb-4 -mt-3 text-xs text-zinc-400 dark:text-zinc-500">
-          Add your phone so posts about you can be linked to your profile
+          If someone posts about you using your phone number, adding it here links those posts to your profile.
         </p>
 
         {error && (

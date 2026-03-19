@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { normalizePhone } from "@/lib/phone";
+import { linkReferral } from "@/app/(auth)/actions";
 
 export async function signOut() {
   const supabase = await createClient();
@@ -81,6 +82,15 @@ export async function updatePhoneNumber(
       p_university_id: profile.university_id,
     }
   );
+
+  // Link any referrals for claimed placeholders
+  if (mergedCount && mergedCount > 0) {
+    try {
+      await linkReferral(user.id, profile.university_id);
+    } catch {
+      // Fire-and-forget
+    }
+  }
 
   return { success: true, mergedCount: mergedCount ?? 0 };
 }

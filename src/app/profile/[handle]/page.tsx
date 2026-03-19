@@ -93,6 +93,7 @@ export default async function ProfileHandlePage({
   }
 
   const isOwnProfile = !isPlaceholderProfile && currentUser?.profile.id === profileUser?.id;
+  const hasNoPhone = isOwnProfile && !currentUser?.profile.phone_number;
   const displayHandle = isPlaceholderProfile ? placeholder!.handle : profileUser!.handle;
 
   return (
@@ -135,6 +136,15 @@ export default async function ProfileHandlePage({
               <p className="mt-1 text-zinc-500 dark:text-zinc-400">
                 {profileUser!.display_name}
               </p>
+            )}
+            {hasNoPhone && (
+              <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-300">
+                Add your phone number in{" "}
+                <Link href="/settings" className="font-medium underline">
+                  settings
+                </Link>{" "}
+                to see posts from people who don&apos;t know your handle.
+              </div>
             )}
             {!isOwnProfile && (
               <Link

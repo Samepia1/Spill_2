@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { updateSession } from "@/lib/supabase/middleware";
 
-const publicRoutes = ["/login", "/verify", "/unsubscribe", "/api/unsubscribe", "/api/test-email"];
+const publicRoutes = ["/login", "/verify", "/unsubscribe", "/api/unsubscribe", "/api/test-email", "/invite"];
 
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;

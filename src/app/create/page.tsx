@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useMemo, useCallback, Suspense } from "react";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
 import { searchTargetUsers, createPost, getCurrentUserHandle, getCurrentUserId, checkPhoneNumber } from "./actions";
 import Avatar from "@/components/avatar";
 import MediaPicker from "@/components/media-picker";
@@ -11,6 +11,7 @@ import { mentionToken, displayLength } from "@/lib/mentions";
 
 function CreatePostForm() {
   const searchParams = useSearchParams();
+  const router = useRouter();
 
   const [currentUserHandle, setCurrentUserHandle] = useState<string | null>(null);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
@@ -317,8 +318,15 @@ function CreatePostForm() {
     if (result?.error) {
       setError(result.error);
       setLoading(false);
+    } else if (result && "success" in result && result.placeholderId) {
+      // Placeholder post — redirect to success page with SMS prompt
+      const params = new URLSearchParams({
+        placeholder: result.placeholderId,
+        post: result.postId,
+      });
+      router.push(`/create/success?${params.toString()}`);
     }
-    // If successful, createPost calls redirect("/") so we won't reach here
+    // For real user posts, createPost calls redirect("/") so we won't reach here
   }
 
   const subjectLength = subject.length;

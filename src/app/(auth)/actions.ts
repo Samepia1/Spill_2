@@ -95,6 +95,27 @@ export async function resendOtp(formData: FormData) {
   return { success: "Code resent successfully." };
 }
 
+export async function linkReferral(inviteeId: string, universityId: string) {
+  const supabase = await createClient();
+
+  // Find placeholder(s) claimed by this user and update matching referral rows
+  const { data: claimed } = await supabase
+    .from("placeholder_profiles")
+    .select("id")
+    .eq("claimed_by", inviteeId)
+    .eq("university_id", universityId);
+
+  if (!claimed || claimed.length === 0) return;
+
+  for (const placeholder of claimed) {
+    await supabase
+      .from("referrals")
+      .update({ invitee_id: inviteeId })
+      .eq("placeholder_id", placeholder.id)
+      .is("invitee_id", null);
+  }
+}
+
 export async function completeOnboarding(formData: FormData) {
   const handle = formData.get("handle") as string;
   const displayName = (formData.get("display_name") as string) || null;
@@ -167,6 +188,12 @@ export async function completeOnboarding(formData: FormData) {
       p_user_id: authUser.id,
       p_university_id: universityId,
     });
+
+    // Link referral if this user was invited via SMS
+    const referrerId = formData.get("referrer_id") as string | null;
+    if (referrerId) {
+      await linkReferral(authUser.id, universityId);
+    }
   }
 
   redirect("/");

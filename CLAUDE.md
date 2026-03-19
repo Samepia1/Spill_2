@@ -30,7 +30,8 @@ src/
 │   │   └── onboarding/page.tsx # Handle + display name → create public.users row
 │   ├── create/
 │   │   ├── page.tsx            # Post creation form (target picker, subject, body, media picker, anonymous toggle, expiration toggle, @mention in body)
-│   │   └── actions.ts          # Server actions: createPost (+ mention notifications), getCurrentUserHandle, getCurrentUserId, searchTargetUsers, checkPhoneNumber
+│   │   ├── actions.ts          # Server actions: createPost (+ mention notifications), getCurrentUserHandle, getCurrentUserId, searchTargetUsers, checkPhoneNumber, getPlaceholderSmsData, recordSmsPrompt
+│   │   └── success/page.tsx    # Post success page with SMS invite prompt for placeholder targets
 │   ├── search/
 │   │   ├── page.tsx            # Search users page (activity-ranked, infinite scroll)
 │   │   └── actions.ts          # Server action: searchUsersRanked (RPC, paginated)
@@ -47,6 +48,8 @@ src/
 │   │   └── unsubscribe/route.ts # GET handler: token-based email unsubscribe (service role client)
 │   ├── unsubscribe/
 │   │   └── page.tsx            # Unsubscribe confirmation page
+│   ├── invite/
+│   │   └── page.tsx            # Referral landing page (stores ref in localStorage, redirects to /login)
 │   └── mod/
 │       ├── page.tsx            # Moderation queue (Open/Reviewed/Dismissed tabs)
 │       ├── actions.ts          # Server actions: removePost, removeComment, suspendUser, dismissReport
@@ -110,7 +113,9 @@ supabase/
     ├── 019_post_media.sql                 # Post media table, storage bucket, nullable subject/body, media_count trigger
     ├── 020_notifications.sql              # Notifications table, indexes, RLS policies
     ├── 021_mention_notifications.sql      # Add comment_id to notifications for @mention scroll-to-comment
-    └── 022_email_preferences.sql          # Email notification preferences, cooldown timestamp, unsubscribe token on users
+    ├── 022_email_preferences.sql          # Email notification preferences, cooldown timestamp, unsubscribe token on users
+    ├── 023_increase_video_limit.sql      # Increase video upload limits
+    └── 024_sms_invite.sql                # SMS invite prompt: last_sms_prompted_at on placeholders, referrals table
 ```
 
 ## Auth Flow (fully working)
@@ -123,7 +128,7 @@ supabase/
 7. Authenticated users visiting `/login` or `/onboarding` → redirected to `/`
 
 ## Route Protection (src/proxy.ts)
-- **Public routes** (no auth): `/login`, `/verify`
+- **Public routes** (no auth): `/login`, `/verify`, `/invite`
 - **Onboarding** (auth required, no profile needed): `/onboarding`
 - **Mod routes** (auth + profile + moderator/admin role required): `/mod`
 - **Protected** (auth + profile required): everything else
@@ -132,7 +137,8 @@ supabase/
 ## Database Schema (key tables)
 - **universities**: id, name, email_domain (seeded with umn.edu, test.edu)
 - **users**: id (refs auth.users), university_id, email, handle, display_name, avatar_url (nullable), phone_number (nullable), role (`user`/`moderator`/`admin`), status (`active`/`suspended`/`deleted`)
-- **placeholder_profiles**: id, phone_number (E.164), phone_last_four, handle (generated `phone_XXXX`), university_id, created_by, claimed_by (nullable), claimed_at, post_count, unique_poster_count. UNIQUE(phone_number, university_id). RLS university-scoped.
+- **placeholder_profiles**: id, phone_number (E.164), phone_last_four, handle (generated `phone_XXXX`), university_id, created_by, claimed_by (nullable), claimed_at, post_count, unique_poster_count, last_sms_prompted_at (nullable). UNIQUE(phone_number, university_id). RLS university-scoped.
+- **referrals**: id, inviter_id (FK users), invitee_id (nullable FK users — filled on claim), placeholder_id (FK placeholder_profiles), university_id, created_at. RLS: insert/select own. Analytics-only tracking.
 - **posts**: id, university_id, author_user_id, target_user_id (nullable), target_placeholder_id (nullable, FK to placeholder_profiles), subject (nullable, 1-200 chars), body (nullable, 1-1000 chars), media_count (int, default 0), is_anonymous (bool, default true), expires_at (nullable timestamptz), like_count, comment_count, status (`active`/`expired`/`removed`), removed_at, removed_by, removal_reason. XOR constraint: exactly one of target_user_id or target_placeholder_id must be set. Content constraint: at least one of subject, body, or media_count > 0.
 - **post_media**: id, post_id (FK → posts, CASCADE), university_id, storage_path, public_url, media_type (`image`/`video`), file_size_bytes, mime_type, width (nullable), height (nullable), thumbnail_url (nullable, for videos), display_order, moderation_status (`pending`/`approved`/`rejected`, default `pending`), moderation_checked_at (nullable). RLS university-scoped. Trigger updates `posts.media_count`.
 - **comments**: id, post_id, university_id, author_user_id, body (1-300 chars), is_anonymous (bool, default true), parent_comment_id, status (`active`/`removed`), removed_at, removed_by, removal_reason
@@ -191,6 +197,8 @@ supabase/
 22. **Notifications system**: Bell icon next to settings gear (top-right) with slide-down dropdown. `notifications` table stores denormalized notification data (actor_handle, post_subject) to render without joins. Four notification types: `new_post` (someone posted about you), `new_comment` (someone commented on your post), `new_like` (someone liked your post), `new_mention` (someone @mentioned you). Anonymous actions show "Someone" instead of handle. Self-notifications skipped. Unread count badge on bell icon. Dropdown shows last 20 notifications with type icons, relative time, and blue unread dots. Click to mark read + navigate to post. "Mark all as read" button. Fire-and-forget inserts in `createPost`, `createComment`, and `toggleLike` server actions — notification failures never block the primary action. Extensible: adding a new type is just a new insert call + message template in `NotificationMessage`.
 23. **@Mention system**: Global mention engine for comments and post bodies. Typing `@` opens an autocomplete dropdown with thread participants (Anon 1, Anon 2, @handles) and global user search. Mentions stored as `@[label](type:id)` tokens in text, rendered as styled clickable elements (blue for user profiles, violet for anon scroll-to-comment). `@anonN` mentions are thread-local — resolved server-side via anonMap. Each mention generates a `new_mention` notification with `comment_id` for scroll-to-comment navigation. Multiple mentions per comment supported. Self-mentions silently ignored. Dual-state text management in composer: display text (clean `@label`) in textarea, raw text (with tokens) stored/submitted.
 24. **Email notifications**: Resend-powered email notifications for three event types: `new_post`, `new_comment` (revealed identity only), `new_mention`. 2-hour per-user cooldown — if multiple events happen during cooldown, next email sends a digest of all unread notifications. Per-type toggles in settings (posts, comments, mentions). Token-based unsubscribe via `/api/unsubscribe`. Teaser-only emails (no post content) with branded HTML template. Fire-and-forget sends in server actions via `sendNotificationEmail()` from `src/lib/email.ts`. Env vars: `RESEND_API_KEY`, `RESEND_FROM_EMAIL`, `NEXT_PUBLIC_BASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`.
+25. **SMS invite prompt**: After posting about a placeholder target (someone not on Spill), redirects to a success page (`/create/success`) with a "Send Text" button that opens the native SMS app via `sms:` URI. Pre-filled message includes post count and referral link (`/invite?ref=userId`). 2-hour per-placeholder cooldown via `last_sms_prompted_at` column — if recently prompted, SMS section hidden but success confirmation still shown. Referral tracking via `referrals` table (inviter_id, invitee_id, placeholder_id). Invite landing page (`/invite`) stores referrer in localStorage, redirects to `/login`. On onboarding/settings phone claim, `linkReferral()` updates referral rows with invitee_id. Analytics only (no rewards). Non-placeholder posts keep direct redirect to feed.
+26. **Phone number warning banners**: Amber warning on own profile page when phone number is missing: "Add your phone number in settings to see posts from people who don't know your handle." Links to `/settings`. Onboarding page has updated helper text explaining that adding a phone number links existing posts. `getCurrentUser()` now includes `phone_number` in the profile query.
 
 ## Theme System
 - **Class-based dark mode**: Tailwind v4 `@custom-variant dark` in `globals.css` — activates `dark:` utilities via `.dark` class on `<html>`
@@ -286,3 +294,4 @@ npm run lint   # ESLint
 - **Mention notifications**: `new_mention` type with `comment_id` column (nullable). Clicking navigates to `/post/{id}?comment={commentId}`. `ScrollToComment` component reads the param and scrolls.
 - **Anonymous numbering shared logic**: `buildAnonMap()` in `src/lib/mentions.ts` is used by both the thread page (render) and `createComment` (notification resolution). Same algorithm ensures consistency.
 - **Email notifications**: Fire-and-forget `sendNotificationEmail()` calls in server actions, same pattern as in-app notifications. Resend client lazily initialized to avoid build errors when env var is missing. 2-hour cooldown tracked via `last_email_sent_at` on users table. Anonymous comments skip email (`actorHandle === null` check). Digest emails batch unread notifications when cooldown has passed. Unsubscribe route at `/api/unsubscribe` uses service-role Supabase client to bypass RLS. Unsubscribe + settings routes added to `publicRoutes` in proxy.ts.
+- **SMS invite prompt**: `createPost` returns success data (not `redirect()`) for placeholder posts so the client can redirect to `/create/success`. Real user posts still use server-side `redirect("/")`. The `sms:` URI uses `?&body=` format for cross-platform compatibility (iOS + Android). Phone number fetched via `getPlaceholderSmsData` server action, used only in `sms:` href, never displayed. `recordSmsPrompt` updates `last_sms_prompted_at` and inserts referral row — fire-and-forget on "Send Text" click. Referral linking happens in both onboarding (`completeOnboarding`) and settings (`updatePhoneNumber`) via `linkReferral()`. Referrer ID stored in localStorage at `/invite`, read back in onboarding form as hidden field.

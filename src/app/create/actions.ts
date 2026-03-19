@@ -245,7 +245,25 @@ export async function createPost(formData: FormData) {
       if (mediaError) return { error: mediaError.message };
     }
 
-    redirect("/");
+    // Fetch updated placeholder data for the success page
+    const { data: placeholderData } = await supabase
+      .from("placeholder_profiles")
+      .select("id, handle, post_count, last_sms_prompted_at")
+      .eq("id", placeholderId)
+      .single();
+
+    const twoHoursAgo = Date.now() - 2 * 60 * 60 * 1000;
+    const showSmsPrompt = !placeholderData?.last_sms_prompted_at ||
+      new Date(placeholderData.last_sms_prompted_at).getTime() < twoHoursAgo;
+
+    return {
+      success: true as const,
+      placeholderId,
+      postId: newPost!.id,
+      placeholderHandle: placeholderData?.handle ?? "unknown",
+      postCount: placeholderData?.post_count ?? 1,
+      showSmsPrompt,
+    };
   }
 
   // --- Registered user target path ---
@@ -457,6 +475,60 @@ export async function checkPhoneNumber(phone: string): Promise<
   if (existingPlaceholder) return { existingPlaceholder };
 
   return { available: true };
+}
+
+export async function getPlaceholderSmsData(placeholderId: string) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Not authenticated" };
+
+  const { data: placeholder } = await supabase
+    .from("placeholder_profiles")
+    .select("id, handle, phone_number, post_count, last_sms_prompted_at")
+    .eq("id", placeholderId)
+    .single();
+
+  if (!placeholder) return { error: "Placeholder not found" };
+
+  const twoHoursAgo = Date.now() - 2 * 60 * 60 * 1000;
+  const showSmsPrompt = !placeholder.last_sms_prompted_at ||
+    new Date(placeholder.last_sms_prompted_at).getTime() < twoHoursAgo;
+
+  return {
+    phoneNumber: placeholder.phone_number as string,
+    handle: placeholder.handle as string,
+    postCount: placeholder.post_count as number,
+    showSmsPrompt,
+  };
+}
+
+export async function recordSmsPrompt(placeholderId: string) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Not authenticated" };
+
+  // Update last_sms_prompted_at on the placeholder
+  await supabase
+    .from("placeholder_profiles")
+    .update({ last_sms_prompted_at: new Date().toISOString() })
+    .eq("id", placeholderId);
+
+  // Get user's profile for referral insert
+  const { data: profile } = await supabase
+    .from("users")
+    .select("university_id")
+    .eq("id", user.id)
+    .single();
+  if (!profile) return { error: "Profile not found" };
+
+  // Insert referral record
+  await supabase.from("referrals").insert({
+    inviter_id: user.id,
+    placeholder_id: placeholderId,
+    university_id: profile.university_id,
+  });
+
+  return { success: true };
 }
 
 export async function searchTargetUsers(query: string): Promise<
