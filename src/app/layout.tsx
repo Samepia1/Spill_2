@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import { Analytics } from "@vercel/analytics/next";
 import BottomNavWrapper from "@/components/bottom-nav-wrapper";
 import ThemeProvider from "@/components/theme-provider";
 import TopBarIcons from "@/components/top-bar-icons";
@@ -41,6 +42,7 @@ export default function RootLayout({
           <TopBarIcons />
           <main className="pb-16">{children}</main>
           <BottomNavWrapper />
+          <Analytics />
         </ThemeProvider>
       </body>
     </html>
